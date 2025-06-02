@@ -21,7 +21,7 @@ echo -e "${COLOR_MAGENTA}核心功能老王实现 eooce 。${COLOR_RESET}"
 echo -e "${COLOR_MAGENTA}如果您对此脚本有任何反馈，请通过 Telegram 联系: https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
 echo -e "${COLOR_MAGENTA}--------------------------------------------------------------------------${COLOR_RESET}"
 
-echo -e "${COLOR_GREEN}==================== Webhostmost-ws-nodejs 配置生成脚本 ====================${COLOR_RESET}"
+echo -e "${COLOR_GREEN}==================== 小白请直接一路回车即可 ====================${COLOR_RESET}"
 
 
 # --- Environment Preparation and Detection ---
