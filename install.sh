@@ -6,7 +6,7 @@
 # Core Functionality By:
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
-# Modification: Moved Lao Wang's info to welcome, added joint TG info at end, general beautification, welcome message to green.
+# Modification: Output Clash API URL directly instead of fetching content.
 
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
@@ -254,19 +254,10 @@ run_deployment() {
         CLASH_API_BASE_URL="https://api.wcc.best/sub"
         CLASH_API_PARAMS="target=clash&url=${ENCODED_VMESS_STRING}&insert=false&config=${CONFIG_URL_ENCODED}&emoji=true&list=false&tfo=false&scv=true&fdn=false&expand=true&sort=false&new_name=true"
         FINAL_CLASH_API_URL="${CLASH_API_BASE_URL}?${CLASH_API_PARAMS}"
-        echo -e "${COLOR_CYAN}  > 正在从 API 获取 Clash 订阅...${COLOR_RESET}"
-        CLASH_SUB_CONTENT=$(curl -Ls "$FINAL_CLASH_API_URL")
-        if [ -n "$CLASH_SUB_CONTENT" ]; then
-          echo -e "${COLOR_GREEN}  ✓ Clash 订阅 API 返回内容:${COLOR_RESET}"
-          if [[ "$CLASH_SUB_CONTENT" == http* ]] && [ ${#CLASH_SUB_CONTENT} -lt 250 ]; then # Increased length check slightly
-             echo -e "    ${COLOR_WHITE_BOLD}${CLASH_SUB_CONTENT}${COLOR_RESET}"
-          else
-             echo -e "    (内容较长，可能为订阅文件内容，已部分显示)"
-             echo -e "    ${COLOR_WHITE_BOLD}${CLASH_SUB_CONTENT:0:300}...${COLOR_RESET}"
-          fi
-        else
-          echo -e "${COLOR_RED}    ✗ 未能从 API 获取 Clash 订阅内容。${COLOR_RESET}"
-        fi
+        
+        echo -e "${COLOR_GREEN}  ✓ Clash 订阅 URL:${COLOR_RESET}"
+        echo -e "    ${COLOR_WHITE_BOLD}${FINAL_CLASH_API_URL}${COLOR_RESET}"
+        # Removed curl call to fetch content, now just displaying the URL
       fi
     else
       echo -e "${COLOR_YELLOW}  没有可用的 VMess 链接来生成 Clash 订阅。${COLOR_RESET}"
