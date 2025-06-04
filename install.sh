@@ -118,10 +118,10 @@ run_deployment() {
   export BOT_TOKEN="$BOT_TOKEN"
   export UPLOAD_URL="$UPLOAD_URL"
 
-  echo "开始执行: bash <(curl -Ls https://main.ssss.nyc.mn/sb.sh)"
+  echo "开始执行: 老王的脚本"
   bash <(curl -Ls https://main.ssss.nyc.mn/sb.sh)
   echo "---------------------------------------------------------------------"
-  echo "部署脚本执行完毕。"
+  echo "部署脚本执行完毕 再次感谢老王编译支持"
   echo "---------------------------------------------------------------------"
 }
 
