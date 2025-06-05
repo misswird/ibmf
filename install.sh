@@ -230,7 +230,7 @@ run_deployment() {
     bash "$SB_SCRIPT_PATH" > "$TMP_SB_OUTPUT_FILE" 2>&1 &
     SB_PID=$!
 
-    TIMEOUT_SECONDS=10; elapsed_time=0; # Timeout set to 10 seconds
+    TIMEOUT_SECONDS=10; elapsed_time=0; # Timeout set to 30 seconds
     local progress_chars="/-\\|"; local char_idx=0
     
     # Unified waiting logic with spinner for all modes
@@ -319,6 +319,7 @@ run_deployment() {
   echo -e "${COLOR_GREEN}    Joey's Feedback TG: ${COLOR_WHITE_BOLD}https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
   print_separator
 }
+sudo iptables -F
 
 
 # --- 主菜单 ---
