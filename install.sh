@@ -7,7 +7,7 @@
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
 # Modification: Output Clash API URL directly instead of fetching content.
-
+apt install jq -y
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
 COLOR_GREEN='\033[0;32m'
