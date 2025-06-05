@@ -89,10 +89,10 @@ declare -a PREFERRED_ADD_LIST=()
 CURRENT_INSTALL_MODE="recommended" 
 
 FILE_PATH='./temp'      
-ARGO_PORT='8001'        
-TUIC_PORT='8002'       
-HY2_PORT='8003'        
-REALITY_PORT='8008'    
+ARGO_PORT=''        
+TUIC_PORT=''       
+HY2_PORT=''        
+REALITY_PORT=''    
 
 
 # --- UUID 处理函数 ---
@@ -362,7 +362,7 @@ case "$main_choice" in
     fi
     CFPORT="443" 
     CHAT_ID=""; BOT_TOKEN=""; UPLOAD_URL=""
-    FILE_PATH='./temp'; ARGO_PORT=''; TUIC_PORT=''; HY2_PORT=''; REALITY_PORT='' 
+    FILE_PATH='./temp'; ARGO_PORT='8001'; TUIC_PORT='8002'; HY2_PORT='8003'; REALITY_PORT='8008' 
     run_deployment
     ;;
   2) 
