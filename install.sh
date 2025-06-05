@@ -40,7 +40,6 @@ echo -e "${COLOR_GREEN}  此脚本由 ${COLOR_WHITE_BOLD}Joey (joeyblog.net)${CO
 echo -e "${COLOR_GREEN}  核心功能由 ${COLOR_WHITE_BOLD}老王 (github.com/eooce)${COLOR_GREEN} 实现。${COLOR_RESET}"
 echo
 echo -e "${COLOR_GREEN}  老王的相关信息:${COLOR_RESET}"
-echo -e "${COLOR_GREEN}    Telegram 群组: ${COLOR_WHITE_BOLD}https://t.me/vps888${COLOR_RESET}"
 echo -e "${COLOR_GREEN}    原版脚本编译: ${COLOR_WHITE_BOLD}https://github.com/eooce/sing-box${COLOR_RESET}"
 echo
 echo -e "${COLOR_GREEN}  如果您对 ${COLOR_WHITE_BOLD}此增强脚本${COLOR_GREEN} 有任何反馈，请通过 Telegram 联系 Joey:${COLOR_RESET}"
@@ -286,7 +285,6 @@ run_deployment() {
   echo
   echo -e "${COLOR_GREEN}  感谢使用! 如有问题或建议，请联系:${COLOR_RESET}"
   echo -e "${COLOR_GREEN}    Joey's Feedback TG: ${COLOR_WHITE_BOLD}https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
-  echo -e "${COLOR_GREEN}    老王's TG 群组:    ${COLOR_WHITE_BOLD}https://t.me/vps888${COLOR_RESET}"
   print_separator
 }
 
