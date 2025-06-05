@@ -6,16 +6,16 @@
 # Core Functionality By:
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
-# Modification: Output Clash API URL directly instead of fetching content.
-apt install jq -y
+# Modification: Added jq check and auto-install attempt, removed Lao Wang's TG group.
+
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
 COLOR_GREEN='\033[0;32m'
 COLOR_YELLOW='\033[0;33m'
-COLOR_BLUE='\033[0;34m' # Added Blue for more variety
+COLOR_BLUE='\033[0;34m' 
 COLOR_MAGENTA='\033[0;35m'
 COLOR_CYAN='\033[0;36m'
-COLOR_WHITE_BOLD='\033[1;37m' # Bold White
+COLOR_WHITE_BOLD='\033[1;37m' 
 COLOR_RESET='\033[0m' # No Color
 
 # --- Helper Functions ---
@@ -35,17 +35,15 @@ print_header() {
 }
 
 # --- Welcome Message ---
-print_header "欢迎使用 IBM-sb-ws 增强配置脚本" "${COLOR_GREEN}" # Changed header to green
+print_header "欢迎使用 IBM-sb-ws 增强配置脚本" "${COLOR_GREEN}" 
 echo -e "${COLOR_GREEN}  此脚本由 ${COLOR_WHITE_BOLD}Joey (joeyblog.net)${COLOR_GREEN} 维护和增强。${COLOR_RESET}"
 echo -e "${COLOR_GREEN}  核心功能由 ${COLOR_WHITE_BOLD}老王 (github.com/eooce)${COLOR_GREEN} 实现。${COLOR_RESET}"
-echo
-echo -e "${COLOR_GREEN}  老王的相关信息:${COLOR_RESET}"
-echo -e "${COLOR_GREEN}    原版脚本编译: ${COLOR_WHITE_BOLD}https://github.com/eooce/sing-box${COLOR_RESET}"
+# Removed Lao Wang's specific group and GitHub link from welcome
 echo
 echo -e "${COLOR_GREEN}  如果您对 ${COLOR_WHITE_BOLD}此增强脚本${COLOR_GREEN} 有任何反馈，请通过 Telegram 联系 Joey:${COLOR_RESET}"
 echo -e "${COLOR_GREEN}    Joey's Feedback TG: ${COLOR_WHITE_BOLD}https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
 print_separator
-echo -e "${COLOR_GREEN}>>> 小白用户建议直接一路回车，使用默认配置快速完成部署 <<<${COLOR_RESET}" # This was already green
+echo -e "${COLOR_GREEN}>>> 小白用户建议直接一路回车，使用默认配置快速完成部署 <<<${COLOR_RESET}" 
 echo
 
 # --- 读取用户输入的函数 ---
@@ -56,32 +54,32 @@ read_input() {
   local advice_text="$4"
 
   if [ -n "$advice_text" ]; then
-    echo -e "${COLOR_CYAN}  ${advice_text}${COLOR_RESET}" # Advice text in Cyan
+    echo -e "${COLOR_CYAN}  ${advice_text}${COLOR_RESET}" 
   fi
 
   if [ -n "$default_value" ]; then
-    read -p "$(echo -e ${COLOR_YELLOW}"[?] ${prompt_text} [${default_value}]: "${COLOR_RESET})" user_input # Prompt in Yellow
+    read -p "$(echo -e ${COLOR_YELLOW}"[?] ${prompt_text} [${default_value}]: "${COLOR_RESET})" user_input 
     eval "$variable_name=\"${user_input:-$default_value}\""
   else
     read -p "$(echo -e ${COLOR_YELLOW}"[?] ${prompt_text}: "${COLOR_RESET})" user_input
     eval "$variable_name=\"$user_input\""
   fi
-  echo # New line for readability
+  echo 
 }
 
 # --- 初始化变量 ---
 CUSTOM_UUID=""
-NEZHA_SERVER="" # Not used in recommended mode
-NEZHA_PORT=""   # Not used in recommended mode
-NEZHA_KEY=""    # Not used in recommended mode
-ARGO_DOMAIN=""  # Not used in recommended mode
-ARGO_AUTH=""    # Not used in recommended mode
+NEZHA_SERVER="" 
+NEZHA_PORT=""   
+NEZHA_KEY=""    
+ARGO_DOMAIN=""  
+ARGO_AUTH=""    
 NAME="ibm"
 CFIP="cloudflare.182682.xyz"
 CFPORT="443"
-CHAT_ID=""      # Not used in recommended mode
-BOT_TOKEN=""    # Not used in recommended mode
-UPLOAD_URL=""   # Not used in recommended mode
+CHAT_ID=""      
+BOT_TOKEN=""    
+UPLOAD_URL=""   
 declare -a PREFERRED_ADD_LIST=()
 
 # --- UUID 处理函数 ---
@@ -106,14 +104,54 @@ handle_uuid_generation() {
   echo
 }
 
+# --- 检查并安装 jq ---
+check_and_install_jq() {
+  if command -v jq &> /dev/null; then
+    echo -e "${COLOR_GREEN}  ✓ jq 已安装。${COLOR_RESET}"
+    return 0
+  fi
+
+  echo -e "${COLOR_YELLOW}  jq 未安装，尝试自动安装...${COLOR_RESET}"
+  if command -v apt-get &> /dev/null; then
+    echo -e "${COLOR_CYAN}  > 尝试使用 apt-get 安装 jq...${COLOR_RESET}"
+    sudo apt-get update >/dev/null
+    sudo apt-get install jq -y >/dev/null
+  elif command -v yum &> /dev/null; then
+    echo -e "${COLOR_CYAN}  > 尝试使用 yum 安装 jq...${COLOR_RESET}"
+    sudo yum install jq -y >/dev/null
+  else
+    echo -e "${COLOR_RED}  ✗ 未知的包管理器，无法自动安装 jq。${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}  请手动安装 jq (例如: sudo apt-get install jq 或 sudo yum install jq)，然后重新运行脚本。${COLOR_RESET}"
+    return 1 # Indicate failure to install
+  fi
+
+  if command -v jq &> /dev/null; then
+    echo -e "${COLOR_GREEN}  ✓ jq 安装成功!${COLOR_RESET}"
+    return 0
+  else
+    echo -e "${COLOR_RED}  ✗ jq 安装失败。${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}  请手动安装 jq，然后重新运行脚本。${COLOR_RESET}"
+    return 1 # Indicate failure to install
+  fi
+}
+
+
 # --- 执行部署函数 ---
 run_deployment() {
-  print_header "开始部署流程" "${COLOR_CYAN}" # Changed header to Cyan for this section
+  print_header "开始部署流程" "${COLOR_CYAN}" 
   echo -e "${COLOR_CYAN}  当前配置预览:${COLOR_RESET}"
   echo -e "    ${COLOR_WHITE_BOLD}UUID:${COLOR_RESET} $CUSTOM_UUID"
+  echo -e "    ${COLOR_WHITE_BOLD}哪吒服务器:${COLOR_RESET} $NEZHA_SERVER"
+  echo -e "    ${COLOR_WHITE_BOLD}哪吒端口:${COLOR_RESET} $NEZHA_PORT"
+  echo -e "    ${COLOR_WHITE_BOLD}哪吒密钥:${COLOR_RESET} $NEZHA_KEY"
+  echo -e "    ${COLOR_WHITE_BOLD}Argo域名:${COLOR_RESET} $ARGO_DOMAIN"
+  echo -e "    ${COLOR_WHITE_BOLD}Argo授权:${COLOR_RESET} $ARGO_AUTH"
   echo -e "    ${COLOR_WHITE_BOLD}节点名称 (NAME):${COLOR_RESET} $NAME"
   echo -e "    ${COLOR_WHITE_BOLD}主优选IP (CFIP):${COLOR_RESET} $CFIP (端口: $CFPORT)"
   echo -e "    ${COLOR_WHITE_BOLD}优选IP列表:${COLOR_RESET} ${PREFERRED_ADD_LIST[*]}"
+  echo -e "    ${COLOR_WHITE_BOLD}TG Chat ID:${COLOR_RESET} $CHAT_ID"
+  echo -e "    ${COLOR_WHITE_BOLD}TG Bot Token:${COLOR_RESET} $BOT_TOKEN"
+  echo -e "    ${COLOR_WHITE_BOLD}上传 URL:${COLOR_RESET} $UPLOAD_URL"
   print_separator
 
   # 导出环境变量
@@ -182,10 +220,18 @@ run_deployment() {
   rm "$TMP_SB_OUTPUT_FILE"
   echo
 
-  print_header "部署结果分析与链接生成" "${COLOR_CYAN}" # Changed header to Cyan
+  print_header "部署结果分析与链接生成" "${COLOR_CYAN}" 
   if [ -z "$RAW_SB_OUTPUT" ]; then
     echo -e "${COLOR_RED}  ✗ 错误: 未能捕获到核心脚本的任何输出。${COLOR_RESET}"
   else
+    # 检查并安装 jq
+    if ! check_and_install_jq; then
+        echo -e "${COLOR_RED}  ✗ jq 安装或检测失败。后续的 VMess 处理和 Clash 订阅生成可能无法工作。${COLOR_RESET}"
+        # Decide whether to exit or continue without jq features
+        # exit 1 # Option to exit if jq is critical
+    fi
+    echo
+
     echo -e "${COLOR_MAGENTA}--- 核心脚本执行结果摘要 ---${COLOR_RESET}"
 
     ARGO_DOMAIN_OUTPUT=$(echo "$RAW_SB_OUTPUT" | grep "ArgoDomain:")
@@ -204,8 +250,8 @@ run_deployment() {
       echo -e "${COLOR_YELLOW}  未检测到 VMess 链接。${COLOR_RESET}"
     else
       echo -e "${COLOR_GREEN}  正在处理 VMess 配置链接...${COLOR_RESET}"
-      if ! command -v jq &> /dev/null; then
-        echo -e "${COLOR_YELLOW}  警告: 'jq' 命令未找到。无法生成多个优选地址的 VMess 或 Clash 订阅。${COLOR_RESET}"
+      if ! command -v jq &> /dev/null; then # Re-check jq in case auto-install failed silently for some reason
+        echo -e "${COLOR_YELLOW}  警告: 'jq' 命令仍然不可用。无法生成多个优选地址的 VMess 或 Clash 订阅。${COLOR_RESET}"
       elif ! command -v base64 &> /dev/null; then
         echo -e "${COLOR_RED}  错误: 'base64' 命令未找到。${COLOR_RESET}"
       else
@@ -256,7 +302,6 @@ run_deployment() {
         
         echo -e "${COLOR_GREEN}  ✓ Clash 订阅 URL:${COLOR_RESET}"
         echo -e "    ${COLOR_WHITE_BOLD}${FINAL_CLASH_API_URL}${COLOR_RESET}"
-        # Removed curl call to fetch content, now just displaying the URL
       fi
     else
       echo -e "${COLOR_YELLOW}  没有可用的 VMess 链接来生成 Clash 订阅。${COLOR_RESET}"
@@ -280,18 +325,20 @@ run_deployment() {
     fi
   fi 
   
-  print_header "部署完成与支持信息" "${COLOR_GREEN}" # Changed header to Green
+  print_header "部署完成与支持信息" "${COLOR_GREEN}" 
   echo -e "${COLOR_GREEN}  IBM-sb-ws 节点部署流程已执行完毕!${COLOR_RESET}"
   echo
   echo -e "${COLOR_GREEN}  感谢使用! 如有问题或建议，请联系:${COLOR_RESET}"
   echo -e "${COLOR_GREEN}    Joey's Feedback TG: ${COLOR_WHITE_BOLD}https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
+  # Removed Lao Wang's TG from final message
   print_separator
 }
 
 
 # --- 主菜单 ---
-print_header "IBM-sb-ws 部署模式选择" "${COLOR_CYAN}" # Changed header to Cyan
+print_header "IBM-sb-ws 部署模式选择" "${COLOR_CYAN}" 
 echo -e "${COLOR_WHITE_BOLD}  1) 推荐安装${COLOR_RESET} (仅需确认UUID，可自定义优选IP列表)"
+echo -e "${COLOR_WHITE_BOLD}  2) 自定义安装${COLOR_RESET} (手动配置所有参数)" 
 echo -e "${COLOR_WHITE_BOLD}  Q) 退出脚本${COLOR_RESET}"
 print_separator
 read -p "$(echo -e ${COLOR_YELLOW}"请输入选项 [1]: "${COLOR_RESET})" main_choice
@@ -300,7 +347,7 @@ main_choice=${main_choice:-1}
 case "$main_choice" in
   1) 
     echo
-    print_header "推荐安装模式" "${COLOR_MAGENTA}" # Changed header to Magenta
+    print_header "推荐安装模式" "${COLOR_MAGENTA}" 
     echo -e "${COLOR_CYAN}此模式将使用最简配置。节点名称默认为 'ibm'。${COLOR_RESET}"
     echo
     handle_uuid_generation 
@@ -329,14 +376,100 @@ case "$main_choice" in
     CHAT_ID=""; BOT_TOKEN=""; UPLOAD_URL=""
     run_deployment
     ;;
+  2) # --- 自定义安装 ---
+    echo
+    print_header "自定义安装模式" "${COLOR_MAGENTA}"
+    echo -e "${COLOR_CYAN}此模式允许您手动配置各项参数。${COLOR_RESET}"
+    echo
+    handle_uuid_generation # 处理 UUID
+
+    echo
+    echo -e "${COLOR_MAGENTA}--- 哪吒探针配置 (可选) ---${COLOR_RESET}"
+    read -p "$(echo -e ${COLOR_YELLOW}"[?] 是否配置哪吒探针? (y/N): "${COLOR_RESET})" configure_section
+    if [[ "$(echo "$configure_section" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then 
+      read_input "哪吒面板域名 (v1格式: nezha.xxx.com:8008; v0格式: nezha.xxx.com):" NEZHA_SERVER "" 
+      read -p "$(echo -e ${COLOR_YELLOW}"[?] 您输入的哪吒面板域名是否已包含端口 (v1版特征)? (y/N): "${COLOR_RESET})" nezha_v1_style
+      if [[ "$(echo "$nezha_v1_style" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+        NEZHA_PORT="" 
+        echo -e "${COLOR_GREEN}  ✓ NEZHA_PORT 将留空 (v1 类型配置)。${COLOR_RESET}"
+      else
+        read_input "哪吒 Agent 端口 (v0 版使用, TLS端口: {443,8443,2096,2087,2083,2053}):" NEZHA_PORT "" 
+      fi
+      read_input "哪吒 NZ_CLIENT_SECRET (v1) 或 Agent 密钥 (v0):" NEZHA_KEY
+    else
+      NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
+      echo -e "${COLOR_YELLOW}  跳过哪吒探针配置。${COLOR_RESET}"
+    fi
+    echo
+
+    echo -e "${COLOR_MAGENTA}--- Argo 隧道配置 (可选) ---${COLOR_RESET}"
+    read -p "$(echo -e ${COLOR_YELLOW}"[?] 是否配置 Argo 隧道? (y/N): "${COLOR_RESET})" configure_section
+    if [[ "$(echo "$configure_section" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+      read_input "Argo 域名 (留空则启用临时隧道):" ARGO_DOMAIN ""
+      if [ -n "$ARGO_DOMAIN" ]; then 
+        read_input "Argo Token 或 JSON:" ARGO_AUTH
+      else
+        ARGO_AUTH="" 
+        echo -e "${COLOR_GREEN}  ✓ 将使用 Argo 临时隧道，无需 ARGO_AUTH。${COLOR_RESET}"
+      fi
+    else
+      ARGO_DOMAIN=""; ARGO_AUTH=""
+      echo -e "${COLOR_YELLOW}  跳过 Argo 隧道配置。${COLOR_RESET}"
+    fi
+    echo
+    
+    echo -e "${COLOR_MAGENTA}--- 其他参数配置 ---${COLOR_RESET}"
+    read_input "节点名称:" NAME "${NAME}" 
+      
+    DEFAULT_PREFERRED_IPS_CUST_BASE="cloudflare.182682.xyz,joeyblog.net"
+    if [ -n "$CFIP" ] && [[ "$CFIP" != "cloudflare.182682.xyz" ]]; then
+        DEFAULT_PREFERRED_IPS_CUST_STR="$CFIP,joeyblog.net,cloudflare.182682.xyz"
+    elif [ -n "$CFIP" ]; then 
+        DEFAULT_PREFERRED_IPS_CUST_STR="$CFIP,joeyblog.net"
+    else 
+        DEFAULT_PREFERRED_IPS_CUST_STR="$DEFAULT_PREFERRED_IPS_CUST_BASE"
+    fi
+    DEFAULT_PREFERRED_IPS_CUST_DISPLAY=$(echo "$DEFAULT_PREFERRED_IPS_CUST_STR" | tr ',' '\n' | sort -u | paste -sd, -)
+    read_input "请输入优选IP或域名列表 (逗号隔开, 留空则使用: ${DEFAULT_PREFERRED_IPS_CUST_DISPLAY}):" USER_PREFERRED_IPS_INPUT_CUST "${DEFAULT_PREFERRED_IPS_CUST_DISPLAY}"
+
+    PREFERRED_ADD_LIST=() 
+    IFS=',' read -r -a temp_array_cust <<< "$USER_PREFERRED_IPS_INPUT_CUST"
+    for item in "${temp_array_cust[@]}"; do
+      trimmed_item_cust=$(echo "$item" | xargs) 
+      if [ -n "$trimmed_item_cust" ]; then 
+          PREFERRED_ADD_LIST+=("$trimmed_item_cust")
+      fi
+    done
+      
+    if [ ${#PREFERRED_ADD_LIST[@]} -gt 0 ]; then
+        CFIP="${PREFERRED_ADD_LIST[0]}" 
+        read_input "为主优选IP (${CFIP}) 设置端口 (默认443):" CFPORT "443"
+    else
+        echo -e "${COLOR_YELLOW}警告: 优选IP列表为空。CFIP 将保持其当前值 '${CFIP}'。${COLOR_RESET}"
+        if [ -z "$CFIP" ]; then CFPORT=""; else CFPORT="443"; fi # Ensure CFPORT is set if CFIP exists or reset if CFIP becomes empty
+    fi
+
+    echo -e "${COLOR_MAGENTA}--- Telegram推送配置 (可选) ---${COLOR_RESET}"
+    read_input "Telegram Chat ID (可选):" CHAT_ID ""
+    if [ -n "$CHAT_ID" ]; then 
+      read_input "Telegram Bot Token (可选,需与Chat ID一同填写):" BOT_TOKEN ""
+    else
+      BOT_TOKEN="" 
+    fi
+    echo -e "${COLOR_MAGENTA}--- 节点信息上传 (可选) ---${COLOR_RESET}"
+    read_input "节点信息上传 URL (可选, merge-sub 地址):" UPLOAD_URL ""
+    
+    run_deployment
+    ;;
   [Qq]*) 
     echo -e "${COLOR_GREEN}已退出向导。感谢使用!${COLOR_RESET}"
     exit 0
     ;;
   *) 
-    echo -e "${COLOR_RED}无效选项，默认执行推荐安装。${COLOR_RESET}"
+    echo -e "${COLOR_RED}无效选项，将执行推荐安装。${COLOR_RESET}"
+    # Fallback to recommended installation for any other input
     echo
-    print_header "推荐安装模式 (默认执行)" "${COLOR_MAGENTA}" # Changed header to Magenta
+    print_header "推荐安装模式 (默认执行)" "${COLOR_MAGENTA}" 
     echo -e "${COLOR_CYAN}此模式将使用最简配置。节点名称默认为 'ibm'。${COLOR_RESET}"
     echo
     handle_uuid_generation 
