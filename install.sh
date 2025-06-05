@@ -6,7 +6,7 @@
 # Core Functionality By:
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
-# Modification: Hide sb.sh raw output in custom mode even on success; Set timeout to 10 seconds.
+# Modification: Updated default ports for recommended mode.
 
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
@@ -230,7 +230,7 @@ run_deployment() {
     bash "$SB_SCRIPT_PATH" > "$TMP_SB_OUTPUT_FILE" 2>&1 &
     SB_PID=$!
 
-    TIMEOUT_SECONDS=30; elapsed_time=0; # Timeout set to 30 seconds
+    TIMEOUT_SECONDS=10; elapsed_time=0; # Timeout set to 10 seconds
     local progress_chars="/-\\|"; local char_idx=0
     
     # Unified waiting logic with spinner for all modes
@@ -253,13 +253,6 @@ run_deployment() {
       if [ "$SB_EXEC_EXIT_CODE" -ne 0 ]; then echo -e "${COLOR_RED}  警告: 核心脚本退出码为 $SB_EXEC_EXIT_CODE。${COLOR_RESET}"; fi
     fi
     
-    # Removed conditional raw output display for custom mode
-    # if [ "$CURRENT_INSTALL_MODE" == "custom" ] && [ "$SB_EXEC_EXIT_CODE" -eq 0 ]; then 
-    #     echo
-    #     print_header "核心脚本原始输出 (自定义模式)" "${COLOR_YELLOW}"
-    #     cat "$TMP_SB_OUTPUT_FILE"
-    #     print_separator
-    # fi
     rm "$SB_SCRIPT_PATH"
   else
     echo -e "${COLOR_RED}  ✗ 错误: 下载核心脚本失败。${COLOR_RESET}"; echo "Error: sb.sh download failed." > "$TMP_SB_OUTPUT_FILE"
@@ -319,7 +312,6 @@ run_deployment() {
   echo -e "${COLOR_GREEN}    Joey's Feedback TG: ${COLOR_WHITE_BOLD}https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
   print_separator
 }
-sudo iptables -F
 
 
 # --- 主菜单 ---
@@ -362,7 +354,8 @@ case "$main_choice" in
     fi
     CFPORT="443" 
     CHAT_ID=""; BOT_TOKEN=""; UPLOAD_URL=""
-    FILE_PATH='./temp'; ARGO_PORT='8001'; TUIC_PORT='8002'; HY2_PORT='8003'; REALITY_PORT='8008' 
+    # Set specific default ports for recommended mode
+    FILE_PATH='./temp'; ARGO_PORT='8005'; TUIC_PORT='8006'; HY2_PORT='8007'; REALITY_PORT='8008' 
     run_deployment
     ;;
   2) 
@@ -498,8 +491,11 @@ case "$main_choice" in
     fi
     CFPORT="443" 
     CHAT_ID=""; BOT_TOKEN=""; UPLOAD_URL=""
-    FILE_PATH='./temp'; ARGO_PORT=''; TUIC_PORT=''; HY2_PORT=''; REALITY_PORT='' 
+    # Set specific default ports for recommended mode (fallback if user clears them)
+    FILE_PATH='./temp'; ARGO_PORT='8005'; TUIC_PORT='8006'; HY2_PORT='8007'; REALITY_PORT='8008' 
     run_deployment
+    sudo iptables -F
+
     ;;
 esac
 exit 0
