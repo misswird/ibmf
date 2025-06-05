@@ -134,7 +134,7 @@ handle_nezha_config() {
       nezha_input_choice=${nezha_input_choice:-$default_nezha_method} 
 
       if [[ "$nezha_input_choice" == "1" || "$(echo "$nezha_input_choice" | tr '[:upper:]' '[:lower:]')" == "p" ]]; then
-        echo -e "${COLOR_CYAN}  请粘贴完整的哪吒 Agent 安装命令 (通常包含 'env NZ_SERVER=...' ):${COLOR_RESET}"
+        echo -e "${COLOR_CYAN}  请粘贴完整的哪吒 Agent 安装命令 (就是你正常安装探针的时候用的命令 ):${COLOR_RESET}"
         read -r nezha_cmd_string
         NEZHA_SERVER_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_SERVER=[^ ]*' | cut -d'=' -f2)
         NEZHA_KEY_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_CLIENT_SECRET=[^ ]*' | cut -d'=' -f2)
