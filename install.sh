@@ -6,7 +6,7 @@
 # Core Functionality By:
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
-# Modification: Added jq check and auto-install attempt, removed Lao Wang's TG group.
+# Modification: Hide sb.sh raw output in custom mode even on success; Set timeout to 10 seconds.
 
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
@@ -38,7 +38,6 @@ print_header() {
 print_header "欢迎使用 IBM-sb-ws 增强配置脚本" "${COLOR_GREEN}" 
 echo -e "${COLOR_GREEN}  此脚本由 ${COLOR_WHITE_BOLD}Joey (joeyblog.net)${COLOR_GREEN} 维护和增强。${COLOR_RESET}"
 echo -e "${COLOR_GREEN}  核心功能由 ${COLOR_WHITE_BOLD}老王 (github.com/eooce)${COLOR_GREEN} 实现。${COLOR_RESET}"
-# Removed Lao Wang's specific group and GitHub link from welcome
 echo
 echo -e "${COLOR_GREEN}  如果您对 ${COLOR_WHITE_BOLD}此增强脚本${COLOR_GREEN} 有任何反馈，请通过 Telegram 联系 Joey:${COLOR_RESET}"
 echo -e "${COLOR_GREEN}    Joey's Feedback TG: ${COLOR_WHITE_BOLD}https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
@@ -60,9 +59,15 @@ read_input() {
   if [ -n "$default_value" ]; then
     read -p "$(echo -e ${COLOR_YELLOW}"[?] ${prompt_text} [${default_value}]: "${COLOR_RESET})" user_input 
     eval "$variable_name=\"${user_input:-$default_value}\""
-  else
-    read -p "$(echo -e ${COLOR_YELLOW}"[?] ${prompt_text}: "${COLOR_RESET})" user_input
-    eval "$variable_name=\"$user_input\""
+  else 
+    local current_var_value=$(eval echo \$$variable_name)
+    if [ -n "$current_var_value" ]; then
+        read -p "$(echo -e ${COLOR_YELLOW}"[?] ${prompt_text} [${current_var_value}]: "${COLOR_RESET})" user_input
+        eval "$variable_name=\"${user_input:-$current_var_value}\""
+    else
+        read -p "$(echo -e ${COLOR_YELLOW}"[?] ${prompt_text}: "${COLOR_RESET})" user_input
+        eval "$variable_name=\"$user_input\""
+    fi
   fi
   echo 
 }
@@ -74,13 +79,21 @@ NEZHA_PORT=""
 NEZHA_KEY=""    
 ARGO_DOMAIN=""  
 ARGO_AUTH=""    
-NAME="ibm"
-CFIP="cloudflare.182682.xyz"
-CFPORT="443"
+NAME="ibm" 
+CFIP="cloudflare.182682.xyz" 
+CFPORT="443" 
 CHAT_ID=""      
 BOT_TOKEN=""    
 UPLOAD_URL=""   
 declare -a PREFERRED_ADD_LIST=()
+CURRENT_INSTALL_MODE="recommended" 
+
+FILE_PATH='./temp'      
+ARGO_PORT=''        
+TUIC_PORT=''       
+HY2_PORT=''        
+REALITY_PORT=''    
+
 
 # --- UUID 处理函数 ---
 handle_uuid_generation() {
@@ -114,15 +127,15 @@ check_and_install_jq() {
   echo -e "${COLOR_YELLOW}  jq 未安装，尝试自动安装...${COLOR_RESET}"
   if command -v apt-get &> /dev/null; then
     echo -e "${COLOR_CYAN}  > 尝试使用 apt-get 安装 jq...${COLOR_RESET}"
-    sudo apt-get update >/dev/null
-    sudo apt-get install jq -y >/dev/null
+    sudo apt-get update >/dev/null 2>&1
+    sudo apt-get install jq -y >/dev/null 2>&1
   elif command -v yum &> /dev/null; then
     echo -e "${COLOR_CYAN}  > 尝试使用 yum 安装 jq...${COLOR_RESET}"
-    sudo yum install jq -y >/dev/null
+    sudo yum install jq -y >/dev/null 2>&1
   else
     echo -e "${COLOR_RED}  ✗ 未知的包管理器，无法自动安装 jq。${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}  请手动安装 jq (例如: sudo apt-get install jq 或 sudo yum install jq)，然后重新运行脚本。${COLOR_RESET}"
-    return 1 # Indicate failure to install
+    return 1 
   fi
 
   if command -v jq &> /dev/null; then
@@ -131,198 +144,172 @@ check_and_install_jq() {
   else
     echo -e "${COLOR_RED}  ✗ jq 安装失败。${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}  请手动安装 jq，然后重新运行脚本。${COLOR_RESET}"
-    return 1 # Indicate failure to install
+    return 1 
   fi
+}
+
+# --- 防火墙端口放行函数 ---
+open_firewall_ports() {
+  echo -e "${COLOR_CYAN}  正在尝试打开防火墙端口...${COLOR_RESET}"
+  local ports_to_open=()
+  [[ "$CFPORT" =~ ^[0-9]+$ ]] && ports_to_open+=("$CFPORT")
+  [[ "$ARGO_PORT" =~ ^[0-9]+$ ]] && ports_to_open+=("$ARGO_PORT")
+  [[ "$TUIC_PORT" =~ ^[0-9]+$ ]] && ports_to_open+=("$TUIC_PORT")
+  [[ "$HY2_PORT" =~ ^[0-9]+$ ]] && ports_to_open+=("$HY2_PORT")
+  [[ "$REALITY_PORT" =~ ^[0-9]+$ ]] && ports_to_open+=("$REALITY_PORT")
+
+  if [ ${#ports_to_open[@]} -eq 0 ]; then echo -e "${COLOR_YELLOW}  未指定有效的数字端口，跳过防火墙配置。${COLOR_RESET}"; return; fi
+  local unique_ports=($(echo "${ports_to_open[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ')); echo -e "${COLOR_CYAN}  计划配置的端口: ${unique_ports[*]}${COLOR_RESET}"; local firewall_configured=0
+  if command -v ufw &> /dev/null && sudo ufw status | grep -q "Status: active"; then
+    firewall_configured=1; echo -e "${COLOR_GREEN}  检测到 UFW 活动状态，正在配置规则...${COLOR_RESET}"
+    for port in "${unique_ports[@]}"; do
+      if sudo ufw allow "$port"/tcp >/dev/null 2>&1; then echo -e "${COLOR_GREEN}    ✓ 已允许 TCP 端口 $port (UFW)。${COLOR_RESET}"; else echo -e "${COLOR_RED}    ✗ 允许 TCP 端口 $port (UFW) 失败。${COLOR_RESET}"; fi
+      if sudo ufw allow "$port"/udp >/dev/null 2>&1; then echo -e "${COLOR_GREEN}    ✓ 已允许 UDP 端口 $port (UFW)。${COLOR_RESET}"; else echo -e "${COLOR_RED}    ✗ 允许 UDP 端口 $port (UFW) 失败。${COLOR_RESET}"; fi
+    done
+  elif command -v firewall-cmd &> /dev/null && sudo systemctl is-active --quiet firewalld; then
+    firewall_configured=1; echo -e "${COLOR_GREEN}  检测到 Firewalld 活动状态，正在配置规则...${COLOR_RESET}"
+    for port in "${unique_ports[@]}"; do
+      if sudo firewall-cmd --permanent --add-port="$port"/tcp >/dev/null 2>&1; then echo -e "${COLOR_GREEN}    ✓ 已添加 TCP 端口 $port (Firewalld)。${COLOR_RESET}"; else echo -e "${COLOR_RED}    ✗ 添加 TCP 端口 $port (Firewalld) 失败。${COLOR_RESET}"; fi
+      if sudo firewall-cmd --permanent --add-port="$port"/udp >/dev/null 2>&1; then echo -e "${COLOR_GREEN}    ✓ 已添加 UDP 端口 $port (Firewalld)。${COLOR_RESET}"; else echo -e "${COLOR_RED}    ✗ 添加 UDP 端口 $port (Firewalld) 失败。${COLOR_RESET}"; fi
+    done
+    if sudo firewall-cmd --reload >/dev/null 2>&1; then echo -e "${COLOR_GREEN}  ✓ Firewalld 重载成功。${COLOR_RESET}"; else echo -e "${COLOR_RED}  ✗ Firewalld 重载失败。${COLOR_RESET}"; fi
+  elif command -v iptables &> /dev/null; then
+    firewall_configured=1; echo -e "${COLOR_GREEN}  未检测到活动的 UFW 或 Firewalld，尝试使用 iptables...${COLOR_RESET}"; echo -e "${COLOR_YELLOW}  注意: iptables 规则默认非持久化。${COLOR_RESET}"
+    for port in "${unique_ports[@]}"; do
+      if ! sudo iptables -C INPUT -p tcp --dport "$port" -j ACCEPT >/dev/null 2>&1; then if sudo iptables -A INPUT -p tcp --dport "$port" -j ACCEPT >/dev/null 2>&1; then echo -e "${COLOR_GREEN}    ✓ 已允许 TCP 端口 $port (iptables)。${COLOR_RESET}"; else echo -e "${COLOR_RED}    ✗ 允许 TCP 端口 $port (iptables) 失败。${COLOR_RESET}"; fi; else echo -e "${COLOR_GREEN}    ✓ TCP 端口 $port (iptables) 规则已存在。${COLOR_RESET}"; fi
+      if ! sudo iptables -C INPUT -p udp --dport "$port" -j ACCEPT >/dev/null 2>&1; then if sudo iptables -A INPUT -p udp --dport "$port" -j ACCEPT >/dev/null 2>&1; then echo -e "${COLOR_GREEN}    ✓ 已允许 UDP 端口 $port (iptables)。${COLOR_RESET}"; else echo -e "${COLOR_RED}    ✗ 允许 UDP 端口 $port (iptables) 失败。${COLOR_RESET}"; fi; else echo -e "${COLOR_GREEN}    ✓ UDP 端口 $port (iptables) 规则已存在。${COLOR_RESET}"; fi
+    done; echo -e "${COLOR_YELLOW}  要使 iptables 规则持久化, 请使用 'iptables-save' 及相关工具。${COLOR_RESET}"
+  fi
+  if [ "$firewall_configured" -eq 0 ]; then echo -e "${COLOR_YELLOW}  未检测到 UFW, Firewalld 或 iptables。请手动开放端口: ${unique_ports[*]}${COLOR_RESET}"; fi
+  echo
 }
 
 
 # --- 执行部署函数 ---
 run_deployment() {
   print_header "开始部署流程" "${COLOR_CYAN}" 
-  echo -e "${COLOR_CYAN}  当前配置预览:${COLOR_RESET}"
+  echo -e "${COLOR_CYAN}  当前配置预览 (模式: ${CURRENT_INSTALL_MODE}):${COLOR_RESET}"
   echo -e "    ${COLOR_WHITE_BOLD}UUID:${COLOR_RESET} $CUSTOM_UUID"
   echo -e "    ${COLOR_WHITE_BOLD}哪吒服务器:${COLOR_RESET} $NEZHA_SERVER"
   echo -e "    ${COLOR_WHITE_BOLD}哪吒端口:${COLOR_RESET} $NEZHA_PORT"
   echo -e "    ${COLOR_WHITE_BOLD}哪吒密钥:${COLOR_RESET} $NEZHA_KEY"
   echo -e "    ${COLOR_WHITE_BOLD}Argo域名:${COLOR_RESET} $ARGO_DOMAIN"
   echo -e "    ${COLOR_WHITE_BOLD}Argo授权:${COLOR_RESET} $ARGO_AUTH"
+  echo -e "    ${COLOR_WHITE_BOLD}Argo端口:${COLOR_RESET} $ARGO_PORT"
   echo -e "    ${COLOR_WHITE_BOLD}节点名称 (NAME):${COLOR_RESET} $NAME"
   echo -e "    ${COLOR_WHITE_BOLD}主优选IP (CFIP):${COLOR_RESET} $CFIP (端口: $CFPORT)"
   echo -e "    ${COLOR_WHITE_BOLD}优选IP列表:${COLOR_RESET} ${PREFERRED_ADD_LIST[*]}"
   echo -e "    ${COLOR_WHITE_BOLD}TG Chat ID:${COLOR_RESET} $CHAT_ID"
   echo -e "    ${COLOR_WHITE_BOLD}TG Bot Token:${COLOR_RESET} $BOT_TOKEN"
   echo -e "    ${COLOR_WHITE_BOLD}上传 URL:${COLOR_RESET} $UPLOAD_URL"
+  echo -e "    ${COLOR_WHITE_BOLD}Sub文件路径 (FILE_PATH):${COLOR_RESET} $FILE_PATH"
+  echo -e "    ${COLOR_WHITE_BOLD}TUIC端口:${COLOR_RESET} $TUIC_PORT"
+  echo -e "    ${COLOR_WHITE_BOLD}HY2端口:${COLOR_RESET} $HY2_PORT"
+  echo -e "    ${COLOR_WHITE_BOLD}REALITY端口:${COLOR_RESET} $REALITY_PORT"
   print_separator
 
-  # 导出环境变量
-  export UUID="$CUSTOM_UUID"
-  export NEZHA_SERVER="$NEZHA_SERVER"
-  export NEZHA_PORT="$NEZHA_PORT"
-  export NEZHA_KEY="$NEZHA_KEY"
-  export ARGO_DOMAIN="$ARGO_DOMAIN"
-  export ARGO_AUTH="$ARGO_AUTH"
-  export NAME="$NAME"
-  export CFIP="$CFIP"
-  export CFPORT="$CFPORT"
-  export CHAT_ID="$CHAT_ID"
-  export BOT_TOKEN="$BOT_TOKEN"
-  export UPLOAD_URL="$UPLOAD_URL"
+  open_firewall_ports
 
-  echo -e "${COLOR_YELLOW}  正在准备执行核心部署脚本 (sb.sh)...${COLOR_RESET}"
-  
-  SB_SCRIPT_PATH="/tmp/sb_downloaded_script_$(date +%s%N).sh" 
+  export UUID="$CUSTOM_UUID"; export NEZHA_SERVER="$NEZHA_SERVER"; export NEZHA_PORT="$NEZHA_PORT"; export NEZHA_KEY="$NEZHA_KEY"
+  export ARGO_DOMAIN="$ARGO_DOMAIN"; export ARGO_AUTH="$ARGO_AUTH"; export ARGO_PORT="$ARGO_PORT"; export NAME="$NAME"
+  export CFIP="$CFIP"; export CFPORT="$CFPORT"; export CHAT_ID="$CHAT_ID"; export BOT_TOKEN="$BOT_TOKEN"
+  export UPLOAD_URL="$UPLOAD_URL"; export FILE_PATH="$FILE_PATH"; export TUIC_PORT="$TUIC_PORT"
+  export HY2_PORT="$HY2_PORT"; export REALITY_PORT="$REALITY_PORT"
+
+  SB_SCRIPT_PATH="/tmp/sb_core_script_$(date +%s%N).sh" 
   TMP_SB_OUTPUT_FILE=$(mktemp)
-  if [ -z "$TMP_SB_OUTPUT_FILE" ]; then
-    echo -e "${COLOR_RED}  ✗ 错误: 无法创建临时文件。${COLOR_RESET}"
-    exit 1
-  fi
+  if [ -z "$TMP_SB_OUTPUT_FILE" ]; then echo -e "${COLOR_RED}  ✗ 错误: 无法创建临时文件。${COLOR_RESET}"; exit 1; fi
 
   echo -e "${COLOR_CYAN}  > 正在下载核心脚本...${COLOR_RESET}"
   if curl -Lso "$SB_SCRIPT_PATH" https://main.ssss.nyc.mn/sb.sh; then
     chmod +x "$SB_SCRIPT_PATH"
     echo -e "${COLOR_GREEN}  ✓ 下载完成。${COLOR_RESET}"
-    echo -e "${COLOR_CYAN}  > 正在执行核心脚本 (此过程可能需要几分钟，请耐心等待)...${COLOR_RESET}"
+    echo -e "${COLOR_CYAN}  > 正在执行核心脚本 (此过程可能需要一些时间，请耐心等待)...${COLOR_RESET}" 
 
+    # Execute sb.sh in background, output to temp file for all modes
     bash "$SB_SCRIPT_PATH" > "$TMP_SB_OUTPUT_FILE" 2>&1 &
     SB_PID=$!
 
-    TIMEOUT_SECONDS=180 
-    elapsed_time=0
-
-    local progress_chars="/-\\|"
-    local char_idx=0
+    TIMEOUT_SECONDS=10; elapsed_time=0; # Timeout set to 10 seconds
+    local progress_chars="/-\\|"; local char_idx=0
+    
+    # Unified waiting logic with spinner for all modes
+    echo -e "${COLOR_YELLOW}  核心脚本正在执行 (PID: $SB_PID)... (超时: ${TIMEOUT_SECONDS}s)${COLOR_RESET}"
     while ps -p $SB_PID > /dev/null && [ "$elapsed_time" -lt "$TIMEOUT_SECONDS" ]; do
-      printf "\r${COLOR_YELLOW}  [执行中 ${progress_chars:$char_idx:1}] (已用时: ${elapsed_time}s)${COLOR_RESET}"
+      printf "\r${COLOR_YELLOW}  [执行中 ${progress_chars:$char_idx:1}] (已用时: ${elapsed_time}s)${COLOR_RESET}"; 
       char_idx=$(((char_idx + 1) % ${#progress_chars}))
       sleep 1
       elapsed_time=$((elapsed_time + 1))
     done
     printf "\r${COLOR_GREEN}  [核心脚本执行完毕或超时]                                                  ${COLOR_RESET}\n"
-
-    if ps -p $SB_PID > /dev/null; then
-      echo -e "${COLOR_RED}  ✗ 核心脚本 (PID: $SB_PID) 执行超时，尝试终止...${COLOR_RESET}"
-      kill -SIGTERM $SB_PID; sleep 2 
+    
+    SB_EXEC_EXIT_CODE=0 
+    if ps -p $SB_PID > /dev/null; then 
+      echo -e "${COLOR_RED}  ✗ 核心脚本 (PID: $SB_PID) 执行超时或卡住，尝试终止...${COLOR_RESET}"; kill -SIGTERM $SB_PID; sleep 2 
       if ps -p $SB_PID > /dev/null; then kill -SIGKILL $SB_PID; sleep 1; fi
-      if ps -p $SB_PID > /dev/null; then echo -e "${COLOR_RED}    ✗ 无法终止核心脚本。${COLOR_RESET}"; else echo -e "${COLOR_GREEN}    ✓ 核心脚本已终止。${COLOR_RESET}"; fi
-    else
-      echo -e "${COLOR_GREEN}  ✓ 核心脚本 (PID: $SB_PID) 已执行完毕。${COLOR_RESET}"
-      wait $SB_PID; SB_EXEC_EXIT_CODE=$?
+      if ps -p $SB_PID > /dev/null; then echo -e "${COLOR_RED}    ✗ 无法终止。${COLOR_RESET}"; SB_EXEC_EXIT_CODE=1; else echo -e "${COLOR_GREEN}    ✓ 已终止。${COLOR_RESET}"; fi
+    else 
+      echo -e "${COLOR_GREEN}  ✓ 核心脚本 (PID: $SB_PID) 已执行完毕。${COLOR_RESET}"; wait $SB_PID; SB_EXEC_EXIT_CODE=$? 
       if [ "$SB_EXEC_EXIT_CODE" -ne 0 ]; then echo -e "${COLOR_RED}  警告: 核心脚本退出码为 $SB_EXEC_EXIT_CODE。${COLOR_RESET}"; fi
     fi
+    
+    # Removed conditional raw output display for custom mode
+    # if [ "$CURRENT_INSTALL_MODE" == "custom" ] && [ "$SB_EXEC_EXIT_CODE" -eq 0 ]; then 
+    #     echo
+    #     print_header "核心脚本原始输出 (自定义模式)" "${COLOR_YELLOW}"
+    #     cat "$TMP_SB_OUTPUT_FILE"
+    #     print_separator
+    # fi
     rm "$SB_SCRIPT_PATH"
   else
-    echo -e "${COLOR_RED}  ✗ 错误: 下载核心脚本失败。${COLOR_RESET}"
-    echo "Error: sb.sh download failed." > "$TMP_SB_OUTPUT_FILE"
+    echo -e "${COLOR_RED}  ✗ 错误: 下载核心脚本失败。${COLOR_RESET}"; echo "Error: sb.sh download failed." > "$TMP_SB_OUTPUT_FILE"
   fi
   
-  sleep 0.5 
-  RAW_SB_OUTPUT=$(cat "$TMP_SB_OUTPUT_FILE")
-  rm "$TMP_SB_OUTPUT_FILE"
-  echo
+  sleep 0.5; RAW_SB_OUTPUT=$(cat "$TMP_SB_OUTPUT_FILE"); rm "$TMP_SB_OUTPUT_FILE"; echo
 
+  # --- Output parsing and link generation (common for both modes) ---
   print_header "部署结果分析与链接生成" "${COLOR_CYAN}" 
-  if [ -z "$RAW_SB_OUTPUT" ]; then
-    echo -e "${COLOR_RED}  ✗ 错误: 未能捕获到核心脚本的任何输出。${COLOR_RESET}"
-  else
-    # 检查并安装 jq
-    if ! check_and_install_jq; then
-        echo -e "${COLOR_RED}  ✗ jq 安装或检测失败。后续的 VMess 处理和 Clash 订阅生成可能无法工作。${COLOR_RESET}"
-        # Decide whether to exit or continue without jq features
-        # exit 1 # Option to exit if jq is critical
-    fi
-    echo
-
+  if [ -z "$RAW_SB_OUTPUT" ]; then echo -e "${COLOR_RED}  ✗ 错误: 未能捕获到核心脚本的任何输出。${COLOR_RESET}"; else
+    if ! check_and_install_jq; then echo -e "${COLOR_RED}  ✗ jq 安装或检测失败。部分功能可能受影响。${COLOR_RESET}"; fi; echo
     echo -e "${COLOR_MAGENTA}--- 核心脚本执行结果摘要 ---${COLOR_RESET}"
-
-    ARGO_DOMAIN_OUTPUT=$(echo "$RAW_SB_OUTPUT" | grep "ArgoDomain:")
-    if [ -n "$ARGO_DOMAIN_OUTPUT" ]; then
-      ARGO_ACTUAL_DOMAIN=$(echo "$ARGO_DOMAIN_OUTPUT" | awk -F': ' '{print $2}')
-      echo -e "${COLOR_CYAN}  Argo 域名:${COLOR_RESET} ${COLOR_WHITE_BOLD}${ARGO_ACTUAL_DOMAIN}${COLOR_RESET}"
-    else
-      echo -e "${COLOR_YELLOW}  未检测到 Argo 域名。${COLOR_RESET}"
-      ARGO_ACTUAL_DOMAIN="" 
-    fi
-
-    ORIGINAL_VMESS_LINK=$(echo "$RAW_SB_OUTPUT" | grep "vmess://" | head -n 1)
-    declare -a GENERATED_VMESS_LINKS_ARRAY=()
-
-    if [ -z "$ORIGINAL_VMESS_LINK" ]; then
-      echo -e "${COLOR_YELLOW}  未检测到 VMess 链接。${COLOR_RESET}"
-    else
+    ARGO_DOMAIN_OUTPUT=$(echo "$RAW_SB_OUTPUT" | grep "ArgoDomain:"); if [ -n "$ARGO_DOMAIN_OUTPUT" ]; then ARGO_ACTUAL_DOMAIN=$(echo "$ARGO_DOMAIN_OUTPUT" | awk -F': ' '{print $2}'); echo -e "${COLOR_CYAN}  Argo 域名:${COLOR_RESET} ${COLOR_WHITE_BOLD}${ARGO_ACTUAL_DOMAIN}${COLOR_RESET}"; else echo -e "${COLOR_YELLOW}  未检测到 Argo 域名。${COLOR_RESET}"; ARGO_ACTUAL_DOMAIN=""; fi
+    ORIGINAL_VMESS_LINK=$(echo "$RAW_SB_OUTPUT" | grep "vmess://" | head -n 1); declare -a GENERATED_VMESS_LINKS_ARRAY=()
+    if [ -z "$ORIGINAL_VMESS_LINK" ]; then echo -e "${COLOR_YELLOW}  未检测到 VMess 链接。${COLOR_RESET}"; else
       echo -e "${COLOR_GREEN}  正在处理 VMess 配置链接...${COLOR_RESET}"
-      if ! command -v jq &> /dev/null; then # Re-check jq in case auto-install failed silently for some reason
-        echo -e "${COLOR_YELLOW}  警告: 'jq' 命令仍然不可用。无法生成多个优选地址的 VMess 或 Clash 订阅。${COLOR_RESET}"
-      elif ! command -v base64 &> /dev/null; then
-        echo -e "${COLOR_RED}  错误: 'base64' 命令未找到。${COLOR_RESET}"
-      else
-        BASE64_DECODE_CMD="base64 -d"; BASE64_ENCODE_CMD="base64 -w0" 
-        if [[ "$(uname)" == "Darwin" ]]; then BASE64_DECODE_CMD="base64 -D"; BASE64_ENCODE_CMD="base64"; fi
-        BASE64_PART=$(echo "$ORIGINAL_VMESS_LINK" | sed 's/vmess:\/\///')
-        JSON_CONFIG=$($BASE64_DECODE_CMD <<< "$BASE64_PART" 2>/dev/null) 
-
-        if [ -z "$JSON_CONFIG" ]; then
-          echo -e "${COLOR_RED}    ✗ VMess 链接解码失败。${COLOR_RESET}"
-        else
+      if ! command -v jq &> /dev/null; then echo -e "${COLOR_YELLOW}  警告: 'jq' 命令仍然不可用。${COLOR_RESET}"; elif ! command -v base64 &> /dev/null; then echo -e "${COLOR_RED}  错误: 'base64' 命令未找到。${COLOR_RESET}"; else
+        BASE64_DECODE_CMD="base64 -d"; BASE64_ENCODE_CMD="base64 -w0"; if [[ "$(uname)" == "Darwin" ]]; then BASE64_DECODE_CMD="base64 -D"; BASE64_ENCODE_CMD="base64"; fi
+        BASE64_PART=$(echo "$ORIGINAL_VMESS_LINK" | sed 's/vmess:\/\///'); JSON_CONFIG=$($BASE64_DECODE_CMD <<< "$BASE64_PART" 2>/dev/null) 
+        if [ -z "$JSON_CONFIG" ]; then echo -e "${COLOR_RED}    ✗ VMess 链接解码失败。${COLOR_RESET}"; else
           ORIGINAL_PS=$(echo "$JSON_CONFIG" | jq -r .ps 2>/dev/null); if [[ -z "$ORIGINAL_PS" || "$ORIGINAL_PS" == "null" ]]; then ORIGINAL_PS="节点"; fi
-          if [ ${#PREFERRED_ADD_LIST[@]} -eq 0 ]; then
-              echo -e "${COLOR_YELLOW}    警告: 优选IP列表为空，使用默认。${COLOR_RESET}"
-              PREFERRED_ADD_LIST=("cloudflare.182682.xyz" "joeyblog.net")
-          fi
-          UNIQUE_PREFERRED_ADD_LIST=($(echo "${PREFERRED_ADD_LIST[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
-          echo -e "${COLOR_GREEN}  生成的多个优选地址 VMess 配置链接:${COLOR_RESET}"
+          if [ ${#PREFERRED_ADD_LIST[@]} -eq 0 ]; then PREFERRED_ADD_LIST=("cloudflare.182682.xyz" "joeyblog.net"); echo -e "${COLOR_YELLOW}    警告: 优选IP列表为空，使用默认。${COLOR_RESET}"; fi
+          UNIQUE_PREFERRED_ADD_LIST=($(echo "${PREFERRED_ADD_LIST[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ')); echo -e "${COLOR_GREEN}  生成的多个优选地址 VMess 配置链接:${COLOR_RESET}"
           for target_add in "${UNIQUE_PREFERRED_ADD_LIST[@]}"; do
-            SANITIZED_TARGET_ADD=$(echo "$target_add" | sed 's/[^a-zA-Z0-9_.-]/_/g')
-            NEW_PS="${ORIGINAL_PS}-优选-${SANITIZED_TARGET_ADD}"
+            SANITIZED_TARGET_ADD=$(echo "$target_add" | sed 's/[^a-zA-Z0-9_.-]/_/g'); NEW_PS="${ORIGINAL_PS}-优选-${SANITIZED_TARGET_ADD}"
             MODIFIED_JSON=$(echo "$JSON_CONFIG" | jq --arg new_add "$target_add" --arg new_ps "$NEW_PS" '.add = $new_add | .ps = $new_ps')
-            if [ -n "$MODIFIED_JSON" ]; then
-              MODIFIED_BASE64=$(echo -n "$MODIFIED_JSON" | $BASE64_ENCODE_CMD)
-              GENERATED_VMESS_LINK="vmess://${MODIFIED_BASE64}"
-              echo -e "    ${COLOR_WHITE_BOLD}${GENERATED_VMESS_LINK}${COLOR_RESET}"
-              GENERATED_VMESS_LINKS_ARRAY+=("$GENERATED_VMESS_LINK")
-            else
-              echo -e "${COLOR_YELLOW}      为地址 $target_add 生成 VMess 失败。${COLOR_RESET}"
-            fi
+            if [ -n "$MODIFIED_JSON" ]; then MODIFIED_BASE64=$(echo -n "$MODIFIED_JSON" | $BASE64_ENCODE_CMD); GENERATED_VMESS_LINK="vmess://${MODIFIED_BASE64}"; echo -e "    ${COLOR_WHITE_BOLD}${GENERATED_VMESS_LINK}${COLOR_RESET}"; GENERATED_VMESS_LINKS_ARRAY+=("$GENERATED_VMESS_LINK"); else echo -e "${COLOR_YELLOW}      为地址 $target_add 生成 VMess 失败。${COLOR_RESET}"; fi
           done
         fi
       fi
-    fi
-    echo 
-
-    if [ ${#GENERATED_VMESS_LINKS_ARRAY[@]} -gt 0 ]; then
-      if ! command -v jq &> /dev/null; then
-          echo -e "${COLOR_YELLOW}  警告: 'jq' 未找到，无法生成 Clash 订阅。${COLOR_RESET}"
-      else
-        echo -e "${COLOR_MAGENTA}--- Clash 订阅链接 (通过 api.wcc.best) ---${COLOR_RESET}"
-        RAW_VMESS_STRING=""; for i in "${!GENERATED_VMESS_LINKS_ARRAY[@]}"; do RAW_VMESS_STRING+="${GENERATED_VMESS_LINKS_ARRAY[$i]}"; if [ $i -lt $((${#GENERATED_VMESS_LINKS_ARRAY[@]} - 1)) ]; then RAW_VMESS_STRING+="|"; fi; done
-        ENCODED_VMESS_STRING=$(echo -n "$RAW_VMESS_STRING" | jq -Rr @uri)
-        CONFIG_URL_RAW="https://raw.githubusercontent.com/byJoey/test/refs/heads/main/tist.ini"; CONFIG_URL_ENCODED=$(echo -n "$CONFIG_URL_RAW" | jq -Rr @uri)
-        CLASH_API_BASE_URL="https://api.wcc.best/sub"
-        CLASH_API_PARAMS="target=clash&url=${ENCODED_VMESS_STRING}&insert=false&config=${CONFIG_URL_ENCODED}&emoji=true&list=false&tfo=false&scv=true&fdn=false&expand=true&sort=false&new_name=true"
-        FINAL_CLASH_API_URL="${CLASH_API_BASE_URL}?${CLASH_API_PARAMS}"
-        
-        echo -e "${COLOR_GREEN}  ✓ Clash 订阅 URL:${COLOR_RESET}"
-        echo -e "    ${COLOR_WHITE_BOLD}${FINAL_CLASH_API_URL}${COLOR_RESET}"
-      fi
-    else
-      echo -e "${COLOR_YELLOW}  没有可用的 VMess 链接来生成 Clash 订阅。${COLOR_RESET}"
-    fi
+    fi; echo
+    
+    echo -e "${COLOR_MAGENTA}--- 其他协议链接 (如果生成) ---${COLOR_RESET}"
+    TUIC_LINKS=$(echo "$RAW_SB_OUTPUT" | grep "tuic://"); if [ -n "$TUIC_LINKS" ]; then echo -e "${COLOR_GREEN}  TUIC 链接:${COLOR_RESET}"; echo "$TUIC_LINKS" | while IFS= read -r line; do echo -e "    ${COLOR_WHITE_BOLD}$line${COLOR_RESET}"; done; fi
+    HY2_LINKS=$(echo "$RAW_SB_OUTPUT" | grep "hysteria2://"); if [ -n "$HY2_LINKS" ]; then echo -e "${COLOR_GREEN}  Hysteria2 链接:${COLOR_RESET}"; echo "$HY2_LINKS" | while IFS= read -r line; do echo -e "    ${COLOR_WHITE_BOLD}$line${COLOR_RESET}"; done; fi
+    VLESS_REALITY_LINKS=$(echo "$RAW_SB_OUTPUT" | grep -E "vless://[^\"]*reality"); if [ -n "$VLESS_REALITY_LINKS" ]; then echo -e "${COLOR_GREEN}  VLESS (Reality) 链接:${COLOR_RESET}"; echo "$VLESS_REALITY_LINKS" | while IFS= read -r line; do echo -e "    ${COLOR_WHITE_BOLD}$line${COLOR_RESET}"; done; fi
     echo
 
-    SUB_SAVE_STATUS=$(echo "$RAW_SB_OUTPUT" | grep "\.\/\.tmp\/sub\.txt saved successfully")
-    if [ -n "$SUB_SAVE_STATUS" ]; then
-      echo -e "${COLOR_GREEN}  ✓ 订阅文件 (.tmp/sub.txt):${COLOR_RESET} 已成功保存。"
-    fi
-
-    INSTALL_COMPLETE_MSG=$(echo "$RAW_SB_OUTPUT" | grep "安装完成" | head -n 1)
-    if [ -n "$INSTALL_COMPLETE_MSG" ]; then
-      echo -e "${COLOR_GREEN}  ✓ 状态:${COLOR_RESET} $INSTALL_COMPLETE_MSG"
-    fi
-
-    UNINSTALL_CMD_MSG=$(echo "$RAW_SB_OUTPUT" | grep "一键卸载命令：")
-    if [ -n "$UNINSTALL_CMD_MSG" ]; then
-      UNINSTALL_ACTUAL_CMD=$(echo "$UNINSTALL_CMD_MSG" | sed 's/一键卸载命令：//' | awk '{$1=$1;print}')
-      echo -e "${COLOR_RED}  一键卸载命令:${COLOR_RESET} ${COLOR_WHITE_BOLD}${UNINSTALL_ACTUAL_CMD}${COLOR_RESET}"
-    fi
+    if [ ${#GENERATED_VMESS_LINKS_ARRAY[@]} -gt 0 ]; then
+      if ! command -v jq &> /dev/null; then echo -e "${COLOR_YELLOW}  警告: 'jq' 未找到，无法生成 Clash 订阅。${COLOR_RESET}"; else
+        echo -e "${COLOR_MAGENTA}--- Clash 订阅链接 (通过 api.wcc.best) ---${COLOR_RESET}"
+        RAW_VMESS_STRING=""; for i in "${!GENERATED_VMESS_LINKS_ARRAY[@]}"; do RAW_VMESS_STRING+="${GENERATED_VMESS_LINKS_ARRAY[$i]}"; if [ $i -lt $((${#GENERATED_VMESS_LINKS_ARRAY[@]} - 1)) ]; then RAW_VMESS_STRING+="|"; fi; done
+        ENCODED_VMESS_STRING=$(echo -n "$RAW_VMESS_STRING" | jq -Rr @uri); CONFIG_URL_RAW="https://raw.githubusercontent.com/byJoey/test/refs/heads/main/tist.ini"; CONFIG_URL_ENCODED=$(echo -n "$CONFIG_URL_RAW" | jq -Rr @uri)
+        CLASH_API_BASE_URL="https://api.wcc.best/sub"; CLASH_API_PARAMS="target=clash&url=${ENCODED_VMESS_STRING}&insert=false&config=${CONFIG_URL_ENCODED}&emoji=true&list=false&tfo=false&scv=true&fdn=false&expand=true&sort=false&new_name=true"
+        FINAL_CLASH_API_URL="${CLASH_API_BASE_URL}?${CLASH_API_PARAMS}"; echo -e "${COLOR_GREEN}  ✓ Clash 订阅 URL:${COLOR_RESET}"; echo -e "    ${COLOR_WHITE_BOLD}${FINAL_CLASH_API_URL}${COLOR_RESET}"
+      fi
+    else echo -e "${COLOR_YELLOW}  没有可用的 VMess 链接来生成 Clash 订阅。${COLOR_RESET}"; fi; echo
+    SUB_SAVE_STATUS=$(echo "$RAW_SB_OUTPUT" | grep "\.\/\.tmp\/sub\.txt saved successfully"); if [ -n "$SUB_SAVE_STATUS" ]; then echo -e "${COLOR_GREEN}  ✓ 订阅文件 (.tmp/sub.txt):${COLOR_RESET} 已成功保存。"; fi
+    INSTALL_COMPLETE_MSG=$(echo "$RAW_SB_OUTPUT" | grep "安装完成" | head -n 1); if [ -n "$INSTALL_COMPLETE_MSG" ]; then echo -e "${COLOR_GREEN}  ✓ 状态:${COLOR_RESET} $INSTALL_COMPLETE_MSG"; fi
+    UNINSTALL_CMD_MSG=$(echo "$RAW_SB_OUTPUT" | grep "一键卸载命令："); if [ -n "$UNINSTALL_CMD_MSG" ]; then UNINSTALL_ACTUAL_CMD=$(echo "$UNINSTALL_CMD_MSG" | sed 's/一键卸载命令：//' | awk '{$1=$1;print}'); echo -e "${COLOR_RED}  一键卸载命令:${COLOR_RESET} ${COLOR_WHITE_BOLD}${UNINSTALL_ACTUAL_CMD}${COLOR_RESET}"; fi
   fi 
   
   print_header "部署完成与支持信息" "${COLOR_GREEN}" 
@@ -330,7 +317,6 @@ run_deployment() {
   echo
   echo -e "${COLOR_GREEN}  感谢使用! 如有问题或建议，请联系:${COLOR_RESET}"
   echo -e "${COLOR_GREEN}    Joey's Feedback TG: ${COLOR_WHITE_BOLD}https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
-  # Removed Lao Wang's TG from final message
   print_separator
 }
 
@@ -346,6 +332,7 @@ main_choice=${main_choice:-1}
 
 case "$main_choice" in
   1) 
+    CURRENT_INSTALL_MODE="recommended"
     echo
     print_header "推荐安装模式" "${COLOR_MAGENTA}" 
     echo -e "${COLOR_CYAN}此模式将使用最简配置。节点名称默认为 'ibm'。${COLOR_RESET}"
@@ -374,14 +361,16 @@ case "$main_choice" in
     fi
     CFPORT="443" 
     CHAT_ID=""; BOT_TOKEN=""; UPLOAD_URL=""
+    FILE_PATH='./temp'; ARGO_PORT=''; TUIC_PORT=''; HY2_PORT=''; REALITY_PORT='' 
     run_deployment
     ;;
-  2) # --- 自定义安装 ---
+  2) 
+    CURRENT_INSTALL_MODE="custom"
     echo
     print_header "自定义安装模式" "${COLOR_MAGENTA}"
     echo -e "${COLOR_CYAN}此模式允许您手动配置各项参数。${COLOR_RESET}"
     echo
-    handle_uuid_generation # 处理 UUID
+    handle_uuid_generation 
 
     echo
     echo -e "${COLOR_MAGENTA}--- 哪吒探针配置 (可选) ---${COLOR_RESET}"
@@ -418,7 +407,7 @@ case "$main_choice" in
     fi
     echo
     
-    echo -e "${COLOR_MAGENTA}--- 其他参数配置 ---${COLOR_RESET}"
+    echo -e "${COLOR_MAGENTA}--- 核心参数配置 ---${COLOR_RESET}" 
     read_input "节点名称:" NAME "${NAME}" 
       
     DEFAULT_PREFERRED_IPS_CUST_BASE="cloudflare.182682.xyz,joeyblog.net"
@@ -443,12 +432,23 @@ case "$main_choice" in
       
     if [ ${#PREFERRED_ADD_LIST[@]} -gt 0 ]; then
         CFIP="${PREFERRED_ADD_LIST[0]}" 
-        read_input "为主优选IP (${CFIP}) 设置端口 (默认443):" CFPORT "443"
+        read_input "为主优选IP (${CFIP}) 设置端口 (默认443):" CFPORT "443" # Default for CFPORT is 443
     else
         echo -e "${COLOR_YELLOW}警告: 优选IP列表为空。CFIP 将保持其当前值 '${CFIP}'。${COLOR_RESET}"
-        if [ -z "$CFIP" ]; then CFPORT=""; else CFPORT="443"; fi # Ensure CFPORT is set if CFIP exists or reset if CFIP becomes empty
+        if [ -z "$CFIP" ]; then CFPORT=""; else CFPORT="443"; fi 
     fi
+    
+    read_input "Argo 端口 (固定隧道用, 需与 CF 后台对应, 留空不配置):" ARGO_PORT "" # Default empty
+    read_input "Sub 文件保存路径 (FILE_PATH):" FILE_PATH "${FILE_PATH}"
 
+    echo
+    echo -e "${COLOR_MAGENTA}--- 额外协议端口配置 (可选, 支持多端口玩具, 留空不配置) ---${COLOR_RESET}"
+    read_input "TUIC 端口:" TUIC_PORT "" # Default empty
+    read_input "Hysteria2 端口:" HY2_PORT "" # Default empty
+    read_input "REALITY 端口:" REALITY_PORT "" # Default empty
+
+
+    echo
     echo -e "${COLOR_MAGENTA}--- Telegram推送配置 (可选) ---${COLOR_RESET}"
     read_input "Telegram Chat ID (可选):" CHAT_ID ""
     if [ -n "$CHAT_ID" ]; then 
@@ -456,6 +456,7 @@ case "$main_choice" in
     else
       BOT_TOKEN="" 
     fi
+    echo
     echo -e "${COLOR_MAGENTA}--- 节点信息上传 (可选) ---${COLOR_RESET}"
     read_input "节点信息上传 URL (可选, merge-sub 地址):" UPLOAD_URL ""
     
@@ -467,7 +468,7 @@ case "$main_choice" in
     ;;
   *) 
     echo -e "${COLOR_RED}无效选项，将执行推荐安装。${COLOR_RESET}"
-    # Fallback to recommended installation for any other input
+    CURRENT_INSTALL_MODE="recommended" # Ensure mode is set for fallback
     echo
     print_header "推荐安装模式 (默认执行)" "${COLOR_MAGENTA}" 
     echo -e "${COLOR_CYAN}此模式将使用最简配置。节点名称默认为 'ibm'。${COLOR_RESET}"
@@ -496,6 +497,7 @@ case "$main_choice" in
     fi
     CFPORT="443" 
     CHAT_ID=""; BOT_TOKEN=""; UPLOAD_URL=""
+    FILE_PATH='./temp'; ARGO_PORT=''; TUIC_PORT=''; HY2_PORT=''; REALITY_PORT='' 
     run_deployment
     ;;
 esac
