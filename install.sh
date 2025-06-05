@@ -78,7 +78,7 @@ NEZHA_SERVER=""
 NEZHA_PORT=""   
 NEZHA_KEY=""    
 ARGO_DOMAIN=""  
-ARGO_AUTH="8001"    
+ARGO_AUTH=""    
 NAME="ibm" 
 CFIP="cloudflare.182682.xyz" 
 CFPORT="443" 
@@ -89,10 +89,10 @@ declare -a PREFERRED_ADD_LIST=()
 CURRENT_INSTALL_MODE="recommended" 
 
 FILE_PATH='./temp'      
-ARGO_PORT=''        
-TUIC_PORT=''       
-HY2_PORT=''        
-REALITY_PORT=''    
+ARGO_PORT='8001'        
+TUIC_PORT='8002'       
+HY2_PORT='8003'        
+REALITY_PORT='8008'    
 
 
 # --- UUID 处理函数 ---
