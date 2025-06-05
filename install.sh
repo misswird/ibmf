@@ -6,7 +6,7 @@
 # Core Functionality By:
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
-# Modification: Updated default ports for recommended mode.
+# Modification: Added option to parse Nezha config from full command string.
 
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
@@ -230,7 +230,7 @@ run_deployment() {
     bash "$SB_SCRIPT_PATH" > "$TMP_SB_OUTPUT_FILE" 2>&1 &
     SB_PID=$!
 
-    TIMEOUT_SECONDS=69; elapsed_time=0; # Timeout set to 10 seconds
+    TIMEOUT_SECONDS=69; elapsed_time=0; # Timeout set to 69 seconds
     local progress_chars="/-\\|"; local char_idx=0
     
     # Unified waiting logic with spinner for all modes
@@ -368,17 +368,43 @@ case "$main_choice" in
 
     echo
     echo -e "${COLOR_MAGENTA}--- 哪吒探针配置 (可选) ---${COLOR_RESET}"
-    read -p "$(echo -e ${COLOR_YELLOW}"[?] 是否配置哪吒探针? (y/N): "${COLOR_RESET})" configure_section
-    if [[ "$(echo "$configure_section" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then 
-      read_input "哪吒面板域名 (v1格式: nezha.xxx.com:8008; v0格式: nezha.xxx.com):" NEZHA_SERVER "" 
-      read -p "$(echo -e ${COLOR_YELLOW}"[?] 您输入的哪吒面板域名是否已包含端口 (v1版特征)? (y/N): "${COLOR_RESET})" nezha_v1_style
-      if [[ "$(echo "$nezha_v1_style" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
-        NEZHA_PORT="" 
-        echo -e "${COLOR_GREEN}  ✓ NEZHA_PORT 将留空 (v1 类型配置)。${COLOR_RESET}"
-      else
-        read_input "哪吒 Agent 端口 (v0 版使用, TLS端口: {443,8443,2096,2087,2083,2053}):" NEZHA_PORT "" 
+    read -p "$(echo -e ${COLOR_YELLOW}"[?] 是否配置哪吒探针? (y/N): "${COLOR_RESET})" configure_nezha
+    if [[ "$(echo "$configure_nezha" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+      read -p "$(echo -e ${COLOR_YELLOW}"[?] 自动解析命令 (P) 或 手动输入 (M)? [M]: "${COLOR_RESET})" nezha_input_method
+      nezha_input_method=${nezha_input_method:-M}
+
+      if [[ "$(echo "$nezha_input_method" | tr '[:upper:]' '[:lower:]')" == "p" ]]; then
+        echo -e "${COLOR_CYAN}  请粘贴完整的哪吒 Agent 安装命令 (通常包含 'env NZ_SERVER=...' ):${COLOR_RESET}"
+        read -r nezha_cmd_string
+        # Parse NZ_SERVER (might include port)
+        NEZHA_SERVER_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_SERVER=[^ ]*' | cut -d'=' -f2)
+        # Parse NZ_CLIENT_SECRET
+        NEZHA_KEY_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_CLIENT_SECRET=[^ ]*' | cut -d'=' -f2)
+
+        if [ -n "$NEZHA_SERVER_RAW" ] && [ -n "$NEZHA_KEY_RAW" ]; then
+          NEZHA_SERVER="$NEZHA_SERVER_RAW"
+          NEZHA_PORT="" # For v1 style command (port in server string), NEZHA_PORT should be empty for sb.sh
+          NEZHA_KEY="$NEZHA_KEY_RAW"
+          echo -e "${COLOR_GREEN}  ✓ 已从命令解析:${COLOR_RESET}"
+          echo -e "${COLOR_GREEN}    NEZHA_SERVER: ${COLOR_WHITE_BOLD}${NEZHA_SERVER}${COLOR_RESET}"
+          echo -e "${COLOR_GREEN}    NEZHA_PORT: (留空，端口已在SERVER中)${COLOR_RESET}"
+          echo -e "${COLOR_GREEN}    NEZHA_KEY: ${COLOR_WHITE_BOLD}${NEZHA_KEY}${COLOR_RESET}"
+        else
+          echo -e "${COLOR_RED}  ✗ 未能从命令中解析出 NZ_SERVER 或 NZ_CLIENT_SECRET。请检查命令或选择手动输入。${COLOR_RESET}"
+          # Fallback to manual or clear them
+          NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
+        fi
+      else # Manual input
+        read_input "哪吒面板域名 (v1格式: nezha.xxx.com:8008; v0格式: nezha.xxx.com):" NEZHA_SERVER "" 
+        read -p "$(echo -e ${COLOR_YELLOW}"[?] 您输入的哪吒面板域名是否已包含端口 (v1版特征)? (y/N): "${COLOR_RESET})" nezha_v1_style
+        if [[ "$(echo "$nezha_v1_style" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+          NEZHA_PORT="" 
+          echo -e "${COLOR_GREEN}  ✓ NEZHA_PORT 将留空 (v1 类型配置)。${COLOR_RESET}"
+        else
+          read_input "哪吒 Agent 端口 (v0 版使用, TLS端口: {443,8443,2096,2087,2083,2053}):" NEZHA_PORT "" 
+        fi
+        read_input "哪吒 NZ_CLIENT_SECRET (v1) 或 Agent 密钥 (v0):" NEZHA_KEY
       fi
-      read_input "哪吒 NZ_CLIENT_SECRET (v1) 或 Agent 密钥 (v0):" NEZHA_KEY
     else
       NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
       echo -e "${COLOR_YELLOW}  跳过哪吒探针配置。${COLOR_RESET}"
@@ -494,8 +520,6 @@ case "$main_choice" in
     # Set specific default ports for recommended mode (fallback if user clears them)
     FILE_PATH='./temp'; ARGO_PORT='8005'; TUIC_PORT='8006'; HY2_PORT='8007'; REALITY_PORT='8008' 
     run_deployment
-    sudo iptables -F
-
     ;;
 esac
 exit 0
