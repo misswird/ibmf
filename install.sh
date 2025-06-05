@@ -78,7 +78,7 @@ NEZHA_SERVER=""
 NEZHA_PORT=""   
 NEZHA_KEY=""    
 ARGO_DOMAIN=""  
-ARGO_AUTH=""    
+ARGO_AUTH="8001"    
 NAME="ibm" 
 CFIP="cloudflare.182682.xyz" 
 CFPORT="443" 
@@ -230,7 +230,7 @@ run_deployment() {
     bash "$SB_SCRIPT_PATH" > "$TMP_SB_OUTPUT_FILE" 2>&1 &
     SB_PID=$!
 
-    TIMEOUT_SECONDS=10; elapsed_time=0; # Timeout set to 30 seconds
+    TIMEOUT_SECONDS=30; elapsed_time=0; # Timeout set to 30 seconds
     local progress_chars="/-\\|"; local char_idx=0
     
     # Unified waiting logic with spinner for all modes
