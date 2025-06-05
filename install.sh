@@ -6,7 +6,7 @@
 # Core Functionality By:
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
-# Modification: Allow numeric input for Nezha config method selection.
+# Modification: Recommended mode asks for Nezha config (defaults to parse), timeout set to 60s.
 
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
@@ -86,7 +86,7 @@ CHAT_ID=""
 BOT_TOKEN=""    
 UPLOAD_URL=""   
 declare -a PREFERRED_ADD_LIST=()
-CURRENT_INSTALL_MODE="IBM" 
+CURRENT_INSTALL_MODE="recommended" 
 
 FILE_PATH='./temp'      
 ARGO_PORT=''        
@@ -116,6 +116,62 @@ handle_uuid_generation() {
   fi
   echo
 }
+
+# --- 哪吒探针配置函数 (通用) ---
+handle_nezha_config() {
+    echo -e "${COLOR_MAGENTA}--- 哪吒探针配置 (可选) ---${COLOR_RESET}"
+    read -p "$(echo -e ${COLOR_YELLOW}"[?] 是否配置哪吒探针? (y/N): "${COLOR_RESET})" configure_nezha
+    if [[ "$(echo "$configure_nezha" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+      # 推荐模式下，默认使用解析命令的方式
+      local default_nezha_method="1" # 1 for Parse
+      local nezha_prompt_text="[?] 自动解析[1] 或 手动输入[2]? [${default_nezha_method} (自动解析)]: "
+      if [ "$CURRENT_INSTALL_MODE" == "custom" ]; then
+        default_nezha_method="2" # Custom mode defaults to manual
+        nezha_prompt_text="[?] 自动解析[1] 或 手动输入[2]? [${default_nezha_method} (手动输入)]: "
+      fi
+      
+      read -p "$(echo -e ${COLOR_YELLOW}"${nezha_prompt_text}"${COLOR_RESET})" nezha_input_choice
+      nezha_input_choice=${nezha_input_choice:-$default_nezha_method} 
+
+      if [[ "$nezha_input_choice" == "1" || "$(echo "$nezha_input_choice" | tr '[:upper:]' '[:lower:]')" == "p" ]]; then
+        echo -e "${COLOR_CYAN}  请粘贴完整的哪吒 Agent 安装命令 (通常包含 'env NZ_SERVER=...' ):${COLOR_RESET}"
+        read -r nezha_cmd_string
+        NEZHA_SERVER_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_SERVER=[^ ]*' | cut -d'=' -f2)
+        NEZHA_KEY_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_CLIENT_SECRET=[^ ]*' | cut -d'=' -f2)
+
+        if [ -n "$NEZHA_SERVER_RAW" ] && [ -n "$NEZHA_KEY_RAW" ]; then
+          NEZHA_SERVER="$NEZHA_SERVER_RAW"
+          NEZHA_PORT="" 
+          NEZHA_KEY="$NEZHA_KEY_RAW"
+          echo -e "${COLOR_GREEN}  ✓ 已从命令解析:${COLOR_RESET}"
+          echo -e "${COLOR_GREEN}    NEZHA_SERVER: ${COLOR_WHITE_BOLD}${NEZHA_SERVER}${COLOR_RESET}"
+          echo -e "${COLOR_GREEN}    NEZHA_PORT: (留空，端口已在SERVER中)${COLOR_RESET}"
+          echo -e "${COLOR_GREEN}    NEZHA_KEY: ${COLOR_WHITE_BOLD}${NEZHA_KEY}${COLOR_RESET}"
+        else
+          echo -e "${COLOR_RED}  ✗ 未能从命令中解析出 NZ_SERVER 或 NZ_CLIENT_SECRET。请检查命令或选择手动输入。${COLOR_RESET}"
+          NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
+        fi
+      elif [[ "$nezha_input_choice" == "2" || "$(echo "$nezha_input_choice" | tr '[:upper:]' '[:lower:]')" == "m" ]]; then # Manual input
+        read_input "哪吒面板域名 (v1格式: nezha.xxx.com:8008; v0格式: nezha.xxx.com):" NEZHA_SERVER "" 
+        read -p "$(echo -e ${COLOR_YELLOW}"[?] 您输入的哪吒面板域名是否已包含端口 (v1版特征)? (y/N): "${COLOR_RESET})" nezha_v1_style
+        if [[ "$(echo "$nezha_v1_style" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+          NEZHA_PORT="" 
+          echo -e "${COLOR_GREEN}  ✓ NEZHA_PORT 将留空 (v1 类型配置)。${COLOR_RESET}"
+        else
+          read_input "哪吒 Agent 端口 (v0 版使用, TLS端口: {443,8443,2096,2087,2083,2053}):" NEZHA_PORT "" 
+        fi
+        read_input "哪吒 NZ_CLIENT_SECRET (v1) 或 Agent 密钥 (v0):" NEZHA_KEY
+      else
+        echo -e "${COLOR_RED}  ✗ 无效的哪吒配置方式选择，将跳过。${COLOR_RESET}"
+        NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
+      fi
+    else
+      NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
+      echo -e "${COLOR_YELLOW}  跳过哪吒探针配置。${COLOR_RESET}"
+    fi
+    echo
+}
+
 
 # --- 检查并安装 jq ---
 check_and_install_jq() {
@@ -226,14 +282,12 @@ run_deployment() {
     echo -e "${COLOR_GREEN}  ✓ 下载完成。${COLOR_RESET}"
     echo -e "${COLOR_CYAN}  > 正在执行核心脚本 (此过程可能需要一些时间，请耐心等待)...${COLOR_RESET}" 
 
-    # Execute sb.sh in background, output to temp file for all modes
     bash "$SB_SCRIPT_PATH" > "$TMP_SB_OUTPUT_FILE" 2>&1 &
     SB_PID=$!
 
     TIMEOUT_SECONDS=60; elapsed_time=0; # Timeout set to 60 seconds
     local progress_chars="/-\\|"; local char_idx=0
     
-    # Unified waiting logic with spinner for all modes
     echo -e "${COLOR_YELLOW}  核心脚本正在执行 (PID: $SB_PID)... (超时: ${TIMEOUT_SECONDS}s)${COLOR_RESET}"
     while ps -p $SB_PID > /dev/null && [ "$elapsed_time" -lt "$TIMEOUT_SECONDS" ]; do
       printf "\r${COLOR_YELLOW}  [执行中 ${progress_chars:$char_idx:1}] (已用时: ${elapsed_time}s)${COLOR_RESET}"; 
@@ -260,7 +314,6 @@ run_deployment() {
   
   sleep 0.5; RAW_SB_OUTPUT=$(cat "$TMP_SB_OUTPUT_FILE"); rm "$TMP_SB_OUTPUT_FILE"; echo
 
-  # --- Output parsing and link generation (common for both modes) ---
   print_header "部署结果分析与链接生成" "${COLOR_CYAN}" 
   if [ -z "$RAW_SB_OUTPUT" ]; then echo -e "${COLOR_RED}  ✗ 错误: 未能捕获到核心脚本的任何输出。${COLOR_RESET}"; else
     if ! check_and_install_jq; then echo -e "${COLOR_RED}  ✗ jq 安装或检测失败。部分功能可能受影响。${COLOR_RESET}"; fi; echo
@@ -316,7 +369,7 @@ run_deployment() {
 
 # --- 主菜单 ---
 print_header "IBM-sb-ws 部署模式选择" "${COLOR_CYAN}" 
-echo -e "${COLOR_WHITE_BOLD}  1) 推荐安装${COLOR_RESET} (仅需确认UUID，可自定义优选IP列表)"
+echo -e "${COLOR_WHITE_BOLD}  1) 推荐安装${COLOR_RESET} (可配置UUID、优选IP、哪吒探针)" # Updated description
 echo -e "${COLOR_WHITE_BOLD}  2) 自定义安装${COLOR_RESET} (手动配置所有参数)" 
 echo -e "${COLOR_WHITE_BOLD}  Q) 退出脚本${COLOR_RESET}"
 print_separator
@@ -328,9 +381,12 @@ case "$main_choice" in
     CURRENT_INSTALL_MODE="recommended"
     echo
     print_header "推荐安装模式" "${COLOR_MAGENTA}" 
-    echo -e "${COLOR_CYAN}此模式将使用最简配置。节点名称默认为 'ibm'。${COLOR_RESET}"
+    echo -e "${COLOR_CYAN}此模式将使用核心配置。节点名称默认为 'ibm'。${COLOR_RESET}"
     echo
     handle_uuid_generation 
+    
+    # Nezha config for recommended mode
+    handle_nezha_config # Use the common Nezha handler
     
     DEFAULT_PREFERRED_IPS_REC="cloudflare.182682.xyz,joeyblog.net"
     read_input "请输入优选IP或域名列表 (逗号隔开, 留空则使用默认: ${DEFAULT_PREFERRED_IPS_REC}):" USER_PREFERRED_IPS_INPUT_REC "${DEFAULT_PREFERRED_IPS_REC}"
@@ -344,7 +400,7 @@ case "$main_choice" in
       fi
     done
 
-    NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
+    # ARGO_DOMAIN, ARGO_AUTH, CHAT_ID, BOT_TOKEN, UPLOAD_URL remain empty for recommended
     ARGO_DOMAIN=""; ARGO_AUTH=""
     NAME="ibm" 
     if [ ${#PREFERRED_ADD_LIST[@]} -gt 0 ]; then
@@ -365,54 +421,9 @@ case "$main_choice" in
     echo -e "${COLOR_CYAN}此模式允许您手动配置各项参数。${COLOR_RESET}"
     echo
     handle_uuid_generation 
-
-    echo
-    echo -e "${COLOR_MAGENTA}--- 哪吒探针配置 (可选) ---${COLOR_RESET}"
-    read -p "$(echo -e ${COLOR_YELLOW}"[?] 是否配置哪吒探针? (y/N): "${COLOR_RESET})" configure_nezha
-    if [[ "$(echo "$configure_nezha" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
-      read -p "$(echo -e ${COLOR_YELLOW}"[?] 自动解析[1] 或 手动输入[2]? [2]: "${COLOR_RESET})" nezha_input_choice
-      nezha_input_choice=${nezha_input_choice:-2} # Default to manual (2)
-
-      if [[ "$nezha_input_choice" == "1" || "$(echo "$nezha_input_choice" | tr '[:upper:]' '[:lower:]')" == "p" ]]; then
-        echo -e "${COLOR_CYAN}  请粘贴完整的哪吒 Agent 安装命令 (通常包含 'env NZ_SERVER=...' ):${COLOR_RESET}"
-        read -r nezha_cmd_string
-        # Parse NZ_SERVER (might include port)
-        NEZHA_SERVER_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_SERVER=[^ ]*' | cut -d'=' -f2)
-        # Parse NZ_CLIENT_SECRET
-        NEZHA_KEY_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_CLIENT_SECRET=[^ ]*' | cut -d'=' -f2)
-
-        if [ -n "$NEZHA_SERVER_RAW" ] && [ -n "$NEZHA_KEY_RAW" ]; then
-          NEZHA_SERVER="$NEZHA_SERVER_RAW"
-          NEZHA_PORT="" # For v1 style command (port in server string), NEZHA_PORT should be empty for sb.sh
-          NEZHA_KEY="$NEZHA_KEY_RAW"
-          echo -e "${COLOR_GREEN}  ✓ 已从命令解析:${COLOR_RESET}"
-          echo -e "${COLOR_GREEN}    NEZHA_SERVER: ${COLOR_WHITE_BOLD}${NEZHA_SERVER}${COLOR_RESET}"
-          echo -e "${COLOR_GREEN}    NEZHA_PORT: (留空，端口已在SERVER中)${COLOR_RESET}"
-          echo -e "${COLOR_GREEN}    NEZHA_KEY: ${COLOR_WHITE_BOLD}${NEZHA_KEY}${COLOR_RESET}"
-        else
-          echo -e "${COLOR_RED}  ✗ 未能从命令中解析出 NZ_SERVER 或 NZ_CLIENT_SECRET。请检查命令或选择手动输入。${COLOR_RESET}"
-          # Fallback to manual or clear them
-          NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
-        fi
-      elif [[ "$nezha_input_choice" == "2" || "$(echo "$nezha_input_choice" | tr '[:upper:]' '[:lower:]')" == "m" ]]; then # Manual input
-        read_input "哪吒面板域名 (v1格式: nezha.xxx.com:8008; v0格式: nezha.xxx.com):" NEZHA_SERVER "" 
-        read -p "$(echo -e ${COLOR_YELLOW}"[?] 您输入的哪吒面板域名是否已包含端口 (v1版特征)? (y/N): "${COLOR_RESET})" nezha_v1_style
-        if [[ "$(echo "$nezha_v1_style" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
-          NEZHA_PORT="" 
-          echo -e "${COLOR_GREEN}  ✓ NEZHA_PORT 将留空 (v1 类型配置)。${COLOR_RESET}"
-        else
-          read_input "哪吒 Agent 端口 (v0 版使用, TLS端口: {443,8443,2096,2087,2083,2053}):" NEZHA_PORT "" 
-        fi
-        read_input "哪吒 NZ_CLIENT_SECRET (v1) 或 Agent 密钥 (v0):" NEZHA_KEY
-      else
-        echo -e "${COLOR_RED}  ✗ 无效的哪吒配置方式选择，将跳过。${COLOR_RESET}"
-        NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
-      fi
-    else
-      NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
-      echo -e "${COLOR_YELLOW}  跳过哪吒探针配置。${COLOR_RESET}"
-    fi
-    echo
+    
+    # Nezha config for custom mode
+    handle_nezha_config # Use the common Nezha handler
 
     echo -e "${COLOR_MAGENTA}--- Argo 隧道配置 (可选) ---${COLOR_RESET}"
     read -p "$(echo -e ${COLOR_YELLOW}"[?] 是否配置 Argo 隧道? (y/N): "${COLOR_RESET})" configure_section
@@ -498,6 +509,9 @@ case "$main_choice" in
     echo
     handle_uuid_generation 
     
+    # Nezha config for fallback recommended mode
+    handle_nezha_config # Use the common Nezha handler
+
     DEFAULT_PREFERRED_IPS_REC="cloudflare.182682.xyz,joeyblog.net"
     read_input "请输入优选IP或域名列表 (逗号隔开, 留空则使用默认: ${DEFAULT_PREFERRED_IPS_REC}):" USER_PREFERRED_IPS_INPUT_REC "${DEFAULT_PREFERRED_IPS_REC}"
     
@@ -510,7 +524,6 @@ case "$main_choice" in
       fi
     done
 
-    NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
     ARGO_DOMAIN=""; ARGO_AUTH=""
     NAME="ibm" 
     if [ ${#PREFERRED_ADD_LIST[@]} -gt 0 ]; then
