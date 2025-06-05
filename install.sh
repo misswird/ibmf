@@ -6,7 +6,7 @@
 # Core Functionality By:
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
-# Modification: Added option to parse Nezha config from full command string.
+# Modification: Allow numeric input for Nezha config method selection.
 
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
@@ -86,7 +86,7 @@ CHAT_ID=""
 BOT_TOKEN=""    
 UPLOAD_URL=""   
 declare -a PREFERRED_ADD_LIST=()
-CURRENT_INSTALL_MODE="recommended" 
+CURRENT_INSTALL_MODE="IBM" 
 
 FILE_PATH='./temp'      
 ARGO_PORT=''        
@@ -230,7 +230,7 @@ run_deployment() {
     bash "$SB_SCRIPT_PATH" > "$TMP_SB_OUTPUT_FILE" 2>&1 &
     SB_PID=$!
 
-    TIMEOUT_SECONDS=69; elapsed_time=0; # Timeout set to 69 seconds
+    TIMEOUT_SECONDS=60; elapsed_time=0; # Timeout set to 60 seconds
     local progress_chars="/-\\|"; local char_idx=0
     
     # Unified waiting logic with spinner for all modes
@@ -370,10 +370,10 @@ case "$main_choice" in
     echo -e "${COLOR_MAGENTA}--- 哪吒探针配置 (可选) ---${COLOR_RESET}"
     read -p "$(echo -e ${COLOR_YELLOW}"[?] 是否配置哪吒探针? (y/N): "${COLOR_RESET})" configure_nezha
     if [[ "$(echo "$configure_nezha" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
-      read -p "$(echo -e ${COLOR_YELLOW}"[?] 自动解析命令 (P) 或 手动输入 (M)? [M]: "${COLOR_RESET})" nezha_input_method
-      nezha_input_method=${nezha_input_method:-M}
+      read -p "$(echo -e ${COLOR_YELLOW}"[?] 自动解析[1] 或 手动输入[2]? [2]: "${COLOR_RESET})" nezha_input_choice
+      nezha_input_choice=${nezha_input_choice:-2} # Default to manual (2)
 
-      if [[ "$(echo "$nezha_input_method" | tr '[:upper:]' '[:lower:]')" == "p" ]]; then
+      if [[ "$nezha_input_choice" == "1" || "$(echo "$nezha_input_choice" | tr '[:upper:]' '[:lower:]')" == "p" ]]; then
         echo -e "${COLOR_CYAN}  请粘贴完整的哪吒 Agent 安装命令 (通常包含 'env NZ_SERVER=...' ):${COLOR_RESET}"
         read -r nezha_cmd_string
         # Parse NZ_SERVER (might include port)
@@ -394,7 +394,7 @@ case "$main_choice" in
           # Fallback to manual or clear them
           NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
         fi
-      else # Manual input
+      elif [[ "$nezha_input_choice" == "2" || "$(echo "$nezha_input_choice" | tr '[:upper:]' '[:lower:]')" == "m" ]]; then # Manual input
         read_input "哪吒面板域名 (v1格式: nezha.xxx.com:8008; v0格式: nezha.xxx.com):" NEZHA_SERVER "" 
         read -p "$(echo -e ${COLOR_YELLOW}"[?] 您输入的哪吒面板域名是否已包含端口 (v1版特征)? (y/N): "${COLOR_RESET})" nezha_v1_style
         if [[ "$(echo "$nezha_v1_style" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
@@ -404,6 +404,9 @@ case "$main_choice" in
           read_input "哪吒 Agent 端口 (v0 版使用, TLS端口: {443,8443,2096,2087,2083,2053}):" NEZHA_PORT "" 
         fi
         read_input "哪吒 NZ_CLIENT_SECRET (v1) 或 Agent 密钥 (v0):" NEZHA_KEY
+      else
+        echo -e "${COLOR_RED}  ✗ 无效的哪吒配置方式选择，将跳过。${COLOR_RESET}"
+        NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
       fi
     else
       NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
