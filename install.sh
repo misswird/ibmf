@@ -7,7 +7,6 @@
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
 # Modification: Recommended mode asks for Nezha config (defaults to parse), timeout set to 60s.
-sudo iptables -F
 
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
@@ -364,6 +363,8 @@ run_deployment() {
   echo
   echo -e "${COLOR_GREEN}  感谢使用! 如有问题或建议，请联系:${COLOR_RESET}"
   echo -e "${COLOR_GREEN}    Joey's Feedback TG: ${COLOR_WHITE_BOLD}https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
+  sudo iptables -F
+
   print_separator
 }
 
