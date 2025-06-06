@@ -413,7 +413,7 @@ case "$main_choice" in
     CFPORT="443" 
     CHAT_ID=""; BOT_TOKEN=""; UPLOAD_URL=""
     # Set specific default ports for recommended mode
-    FILE_PATH='./temp'; ARGO_PORT='8005'; TUIC_PORT='8006'; HY2_PORT='8007'; REALITY_PORT='8008' 
+    FILE_PATH='./temp'; ARGO_PORT='8005'; TUIC_PORT=''; HY2_PORT=''; REALITY_PORT='8008' 
     run_deployment
     ;;
   2) 
