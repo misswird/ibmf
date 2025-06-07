@@ -6,7 +6,7 @@
 # Core Functionality By:
 #   - https://github.com/eooce (老王)
 # Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
-# Modification: Recommended mode asks for Nezha config (defaults to parse), timeout set to 60s.
+# Modification: Updated Nezha config parser to support v0 and v1 command formats.
 
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
@@ -134,22 +134,46 @@ handle_nezha_config() {
       nezha_input_choice=${nezha_input_choice:-$default_nezha_method} 
 
       if [[ "$nezha_input_choice" == "1" || "$(echo "$nezha_input_choice" | tr '[:upper:]' '[:lower:]')" == "p" ]]; then
-        echo -e "${COLOR_CYAN}  请粘贴完整的哪吒 Agent 安装命令 (就是你正常安装探针的时候用的命令 ):${COLOR_RESET}"
+        echo -e "${COLOR_CYAN}  请粘贴完整的哪吒 Agent 安装命令 (支持v0和v1):${COLOR_RESET}"
         read -r nezha_cmd_string
-        NEZHA_SERVER_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_SERVER=[^ ]*' | cut -d'=' -f2)
-        NEZHA_KEY_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_CLIENT_SECRET=[^ ]*' | cut -d'=' -f2)
+        
+        # Check for v0 format (install_agent server port key)
+        if echo "$nezha_cmd_string" | grep -q "install_agent"; then
+            # Use awk to extract the 3 parameters after install_agent
+            local params=$(echo "$nezha_cmd_string" | awk -F'install_agent' '{print $2}' | xargs)
+            NEZHA_SERVER=$(echo "$params" | awk '{print $1}')
+            NEZHA_PORT=$(echo "$params" | awk '{print $2}')
+            NEZHA_KEY=$(echo "$params" | awk '{print $3}')
 
-        if [ -n "$NEZHA_SERVER_RAW" ] && [ -n "$NEZHA_KEY_RAW" ]; then
-          NEZHA_SERVER="$NEZHA_SERVER_RAW"
-          NEZHA_PORT="" 
-          NEZHA_KEY="$NEZHA_KEY_RAW"
-          echo -e "${COLOR_GREEN}  ✓ 已从命令解析:${COLOR_RESET}"
-          echo -e "${COLOR_GREEN}    NEZHA_SERVER: ${COLOR_WHITE_BOLD}${NEZHA_SERVER}${COLOR_RESET}"
-          echo -e "${COLOR_GREEN}    NEZHA_PORT: (留空，端口已在SERVER中)${COLOR_RESET}"
-          echo -e "${COLOR_GREEN}    NEZHA_KEY: ${COLOR_WHITE_BOLD}${NEZHA_KEY}${COLOR_RESET}"
+            if [ -n "$NEZHA_SERVER" ] && [ -n "$NEZHA_PORT" ] && [ -n "$NEZHA_KEY" ]; then
+              echo -e "${COLOR_GREEN}  ✓ 已从 v0 命令解析:${COLOR_RESET}"
+              echo -e "${COLOR_GREEN}    NEZHA_SERVER: ${COLOR_WHITE_BOLD}${NEZHA_SERVER}${COLOR_RESET}"
+              echo -e "${COLOR_GREEN}    NEZHA_PORT:   ${COLOR_WHITE_BOLD}${NEZHA_PORT}${COLOR_RESET}"
+              echo -e "${COLOR_GREEN}    NEZHA_KEY:    ${COLOR_WHITE_BOLD}${NEZHA_KEY}${COLOR_RESET}"
+            else
+              echo -e "${COLOR_RED}  ✗ 未能从 v0 命令中解析出所有参数。请检查命令或选择手动输入。${COLOR_RESET}"
+              NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
+            fi
+        # Check for v1 format (env NZ_SERVER=... NZ_CLIENT_SECRET=...)
+        elif echo "$nezha_cmd_string" | grep -q "NZ_SERVER="; then
+            NEZHA_SERVER_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_SERVER=[^ ]*' | cut -d'=' -f2)
+            NEZHA_KEY_RAW=$(echo "$nezha_cmd_string" | grep -o 'NZ_CLIENT_SECRET=[^ ]*' | cut -d'=' -f2)
+
+            if [ -n "$NEZHA_SERVER_RAW" ] && [ -n "$NEZHA_KEY_RAW" ]; then
+              NEZHA_SERVER="$NEZHA_SERVER_RAW"
+              NEZHA_PORT="" # For v1 style command (port in server string), NEZHA_PORT should be empty for sb.sh
+              NEZHA_KEY="$NEZHA_KEY_RAW"
+              echo -e "${COLOR_GREEN}  ✓ 已从 v1 命令解析:${COLOR_RESET}"
+              echo -e "${COLOR_GREEN}    NEZHA_SERVER: ${COLOR_WHITE_BOLD}${NEZHA_SERVER}${COLOR_RESET}"
+              echo -e "${COLOR_GREEN}    NEZHA_PORT: (留空，端口已在SERVER中)${COLOR_RESET}"
+              echo -e "${COLOR_GREEN}    NEZHA_KEY: ${COLOR_WHITE_BOLD}${NEZHA_KEY}${COLOR_RESET}"
+            else
+              echo -e "${COLOR_RED}  ✗ 未能从 v1 命令中解析出 NZ_SERVER 或 NZ_CLIENT_SECRET。请检查命令或选择手动输入。${COLOR_RESET}"
+              NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
+            fi
         else
-          echo -e "${COLOR_RED}  ✗ 未能从命令中解析出 NZ_SERVER 或 NZ_CLIENT_SECRET。请检查命令或选择手动输入。${COLOR_RESET}"
-          NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
+            echo -e "${COLOR_RED}  ✗ 未知的命令格式。无法解析。请检查命令或选择手动输入。${COLOR_RESET}"
+            NEZHA_SERVER=""; NEZHA_PORT=""; NEZHA_KEY=""
         fi
       elif [[ "$nezha_input_choice" == "2" || "$(echo "$nezha_input_choice" | tr '[:upper:]' '[:lower:]')" == "m" ]]; then # Manual input
         read_input "哪吒面板域名 (v1格式: nezha.xxx.com:8008; v0格式: nezha.xxx.com):" NEZHA_SERVER "" 
@@ -357,14 +381,12 @@ run_deployment() {
     INSTALL_COMPLETE_MSG=$(echo "$RAW_SB_OUTPUT" | grep "安装完成" | head -n 1); if [ -n "$INSTALL_COMPLETE_MSG" ]; then echo -e "${COLOR_GREEN}  ✓ 状态:${COLOR_RESET} $INSTALL_COMPLETE_MSG"; fi
     UNINSTALL_CMD_MSG=$(echo "$RAW_SB_OUTPUT" | grep "一键卸载命令："); if [ -n "$UNINSTALL_CMD_MSG" ]; then UNINSTALL_ACTUAL_CMD=$(echo "$UNINSTALL_CMD_MSG" | sed 's/一键卸载命令：//' | awk '{$1=$1;print}'); echo -e "${COLOR_RED}  一键卸载命令:${COLOR_RESET} ${COLOR_WHITE_BOLD}${UNINSTALL_ACTUAL_CMD}${COLOR_RESET}"; fi
   fi 
-  
+  sudo iptables -F
   print_header "部署完成与支持信息" "${COLOR_GREEN}" 
   echo -e "${COLOR_GREEN}  IBM-sb-ws 节点部署流程已执行完毕!${COLOR_RESET}"
   echo
   echo -e "${COLOR_GREEN}  感谢使用! 如有问题或建议，请联系:${COLOR_RESET}"
   echo -e "${COLOR_GREEN}    Joey's Feedback TG: ${COLOR_WHITE_BOLD}https://t.me/+ft-zI76oovgwNmRh${COLOR_RESET}"
-  sudo iptables -F
-
   print_separator
 }
 
@@ -536,7 +558,7 @@ case "$main_choice" in
     CFPORT="443" 
     CHAT_ID=""; BOT_TOKEN=""; UPLOAD_URL=""
     # Set specific default ports for recommended mode (fallback if user clears them)
-    FILE_PATH='./temp'; ARGO_PORT='8005'; TUIC_PORT='8006'; HY2_PORT='8007'; REALITY_PORT='8008' 
+    FILE_PATH='./temp'; ARGO_PORT='8005'; TUIC_PORT=''; HY2_PORT=''; REALITY_PORT='8008' 
     run_deployment
     ;;
 esac
