@@ -1,13 +1,4 @@
 #!/bin/bash
-
-# Author: Joey
-# Blog: joeyblog.net
-# Feedback TG (Feedback Telegram): https://t.me/+ft-zI76oovgwNmRh
-# Core Functionality By:
-#   - https://github.com/eooce (老王)
-# Version: 2.4.8.sh (macOS - sed delimiter, panel URL opening with https default) - Modified by User Request
-# Modification: Updated Nezha config parser to support v0 and v1 command formats.
-
 # --- Color Definitions ---
 COLOR_RED='\033[0;31m'
 COLOR_GREEN='\033[0;32m'
